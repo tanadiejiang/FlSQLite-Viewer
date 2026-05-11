@@ -40,6 +40,12 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   @override
   Widget build(BuildContext context) {
     final browser = ref.watch(fileBrowserControllerProvider);
+    if (_filterController.text != browser.filter) {
+      _filterController.value = TextEditingValue(
+        text: browser.filter,
+        selection: TextSelection.collapsed(offset: browser.filter.length),
+      );
+    }
     final theme = Theme.of(context);
     final isWide = MediaQuery.of(context).size.width > 600;
 
@@ -207,9 +213,11 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                     : browser.entries.isEmpty
                         ? Center(
                             child: Text(
-                              browser.showDatabasesOnly
-                                  ? '当前目录无数据库文件'
-                                  : '目录为空',
+                              browser.filter.isNotEmpty
+                                  ? '当前筛选无匹配项'
+                                  : browser.showDatabasesOnly
+                                      ? '当前目录无数据库文件'
+                                      : '目录为空',
                             ),
                           )
                         : ListView.builder(

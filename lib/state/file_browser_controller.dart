@@ -80,6 +80,7 @@ class FileBrowserController extends ChangeNotifier {
   // --- Navigation ---
 
   Future<void> navigateTo(String path, {FileAccessMode? forcedMode}) async {
+    final pathChanged = path != _currentPath;
     _lastForcedMode = forcedMode;
     _isLoading = true;
     _errorSummary = null;
@@ -90,6 +91,9 @@ class FileBrowserController extends ChangeNotifier {
       _allEntries = await _accessController.listDirectory(path,
           forcedMode: forcedMode);
       _currentPath = path;
+      if (pathChanged && _filter.isNotEmpty) {
+        _filter = '';
+      }
       _addRecentPath(path);
     } catch (e) {
       final modes = _accessController
