@@ -13,7 +13,6 @@ import 'file_access_controller.dart';
 /// paged data, search, mutations, and recent-open history.
 class DatabaseController extends ChangeNotifier {
   static const _historyPreferenceKey = 'database_open_history';
-  static const _maxHistoryEntries = 20;
 
   final SqliteRepository _repository;
 
@@ -199,7 +198,11 @@ class DatabaseController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final refreshedSession = await access.openDatabaseFile(session.sourcePath);
+      final refreshedSession = await access.openDatabaseFile(
+        session.sourcePath,
+        forcedMode:
+            session.accessMode == FileAccessMode.normal ? null : session.accessMode,
+      );
       await openDatabase(
         refreshedSession,
         preferredTable: selectedTable,
@@ -207,6 +210,10 @@ class DatabaseController extends ChangeNotifier {
         preferredSearch: selectedSearch,
         preferredOrderBy: selectedOrder,
       );
+    } on AccessModeUnavailableException catch (e) {
+      _isLoading = false;
+      _errorMessage = e.message;
+      notifyListeners();
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Refresh failed: $e';
@@ -283,9 +290,6 @@ class DatabaseController extends ChangeNotifier {
 
     _historyEntries.removeWhere((entry) => entry.sourcePath == session.sourcePath);
     _historyEntries.insert(0, updatedEntry);
-    if (_historyEntries.length > _maxHistoryEntries) {
-      _historyEntries = _historyEntries.take(_maxHistoryEntries).toList();
-    }
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(

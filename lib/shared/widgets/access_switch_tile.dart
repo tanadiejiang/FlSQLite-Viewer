@@ -19,6 +19,10 @@ class AccessSwitchTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final statusColorScheme = capability.available
+        ? (background: colorScheme.primaryContainer, foreground: colorScheme.onPrimaryContainer)
+        : (background: colorScheme.errorContainer, foreground: colorScheme.onErrorContainer);
+    final usageHint = _usageHint();
 
     return Card.outlined(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -47,19 +51,15 @@ class AccessSwitchTile extends ConsumerWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: capability.statusText!.contains('已') ||
-                              capability.statusText!.contains('可用')
-                          ? colorScheme.primaryContainer
-                          : colorScheme.errorContainer,
+                      color: statusColorScheme.background,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(capability.statusText!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: capability.statusText!.contains('已') ||
-                                  capability.statusText!.contains('可用')
-                              ? colorScheme.onPrimaryContainer
-                              : colorScheme.onErrorContainer,
-                        )),
+                    child: Text(
+                      capability.statusText!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: statusColorScheme.foreground,
+                      ),
+                    ),
                   ),
                 const SizedBox(width: 8),
                 Switch(
@@ -69,9 +69,20 @@ class AccessSwitchTile extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 4),
-            Text(capability.description,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: colorScheme.onSurfaceVariant)),
+            Text(
+              capability.description,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+            if (usageHint != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                usageHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             if (onAction != null) ...[
               const SizedBox(height: 8),
               SizedBox(
@@ -86,6 +97,22 @@ class AccessSwitchTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String? _usageHint() {
+    if (capability.isChecking) {
+      return null;
+    }
+    if (capability.available && capability.enabled) {
+      return '当前已启用，会参与文件访问降级链。';
+    }
+    if (capability.available && !capability.enabled) {
+      return '已授权，但当前不会使用此访问通道。';
+    }
+    if (!capability.available && capability.enabled) {
+      return '已开启使用，但当前状态不可用。';
+    }
+    return '当前未启用。';
   }
 
   IconData _iconForMode(FileAccessMode mode) {

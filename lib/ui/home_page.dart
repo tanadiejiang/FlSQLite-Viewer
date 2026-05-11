@@ -21,6 +21,7 @@ class HomePage extends ConsumerWidget {
     final isAndroid = Platform.isAndroid;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('FlSQLite Viewer'),
         actions: [
@@ -130,7 +131,7 @@ class HomePage extends ConsumerWidget {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      for (final entry in db.historyEntries.take(8))
+                      for (final entry in db.historyEntries)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.history),
@@ -278,12 +279,15 @@ class HomePage extends ConsumerWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FileBrowserPage(
-          onDatabaseSelected: (path) async {
+          onDatabaseSelected: (path, forcedMode) async {
             Navigator.of(context).pop();
             final access = ref.read(fileAccessControllerProvider);
             final db = ref.read(databaseControllerProvider);
             try {
-              final session = await access.openDatabaseFile(path);
+              final session = await access.openDatabaseFile(
+                path,
+                forcedMode: forcedMode,
+              );
               await db.openDatabase(session);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -293,10 +297,7 @@ class HomePage extends ConsumerWidget {
             } catch (e) {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('打开失败: $e'),
-                    backgroundColor: Colors.red,
-                  ),
+                  SnackBar(content: Text(_formatOpenFailureMessage(e))),
                 );
               }
             }
@@ -314,7 +315,11 @@ class HomePage extends ConsumerWidget {
     final access = ref.read(fileAccessControllerProvider);
     final db = ref.read(databaseControllerProvider);
     try {
-      final session = await access.openDatabaseFile(entry.sourcePath);
+      final session = await access.openDatabaseFile(
+        entry.sourcePath,
+        forcedMode:
+            entry.accessMode == FileAccessMode.normal ? null : entry.accessMode,
+      );
       await db.openDatabase(session, preferredTable: entry.lastTable);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -324,10 +329,7 @@ class HomePage extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('打开失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(_formatOpenFailureMessage(e))),
         );
       }
     }
@@ -425,6 +427,13 @@ class HomePage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _formatOpenFailureMessage(Object error) {
+    if (error is AccessModeUnavailableException) {
+      return error.message;
+    }
+    return '打开失败: $error';
   }
 
   String _modeLabel(FileAccessMode mode) {

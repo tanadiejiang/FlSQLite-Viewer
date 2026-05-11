@@ -8,7 +8,8 @@ import '../../../shared/widgets/file_entry_tile.dart';
 import '../../../shared/widgets/path_breadcrumbs.dart';
 
 class FileBrowserPage extends ConsumerStatefulWidget {
-  final Function(String dbPath)? onDatabaseSelected;
+  final Future<void> Function(String dbPath, FileAccessMode? forcedMode)?
+      onDatabaseSelected;
 
   const FileBrowserPage({super.key, this.onDatabaseSelected});
 
@@ -40,6 +41,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   @override
   Widget build(BuildContext context) {
     final browser = ref.watch(fileBrowserControllerProvider);
+    final access = ref.read(fileAccessControllerProvider);
     if (_filterController.text != browser.filter) {
       _filterController.value = TextEditingValue(
         text: browser.filter,
@@ -113,8 +115,19 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                       final forcedMode = modeName != null
                           ? fileAccessModeFromName(modeName)
                           : null;
-                      browser.navigateTo(parent,
-                          forcedMode: forcedMode);
+                      if (forcedMode != null && !access.canUseMode(forcedMode)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                access.accessModeUnavailableMessage(forcedMode)),
+                          ),
+                        );
+                        return;
+                      }
+                      browser.navigateTo(
+                        parent,
+                        forcedMode: forcedMode,
+                      );
                     },
                     visualDensity: VisualDensity.compact,
                   ),
@@ -231,8 +244,10 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                     browser.navigateTo(entry.fullPath);
                                   } else if (browser
                                       .isDatabaseFile(entry.name)) {
-                                    widget.onDatabaseSelected
-                                        ?.call(entry.fullPath);
+                                    widget.onDatabaseSelected?.call(
+                                      entry.fullPath,
+                                      browser.lastForcedMode,
+                                    );
                                   }
                                 },
                               );

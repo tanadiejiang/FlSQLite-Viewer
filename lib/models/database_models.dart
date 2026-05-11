@@ -157,6 +157,7 @@ const _historyNoChange = Object();
 class AccessCapability {
   final FileAccessMode mode;
   final bool enabled;
+  final bool available;
   final String label;
   final String description;
   final String? statusText;
@@ -165,6 +166,7 @@ class AccessCapability {
   const AccessCapability({
     required this.mode,
     this.enabled = false,
+    this.available = false,
     required this.label,
     required this.description,
     this.statusText,
@@ -173,12 +175,14 @@ class AccessCapability {
 
   AccessCapability copyWith({
     bool? enabled,
+    bool? available,
     String? statusText,
     bool? isChecking,
   }) =>
       AccessCapability(
         mode: mode,
         enabled: enabled ?? this.enabled,
+        available: available ?? this.available,
         label: label,
         description: description,
         statusText: statusText,

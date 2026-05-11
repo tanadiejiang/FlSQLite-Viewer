@@ -76,9 +76,9 @@ class FileBrowserController extends ChangeNotifier {
 
   // Last forced mode, preserved for retry.
   FileAccessMode? _lastForcedMode;
+  FileAccessMode? get lastForcedMode => _lastForcedMode;
 
   // --- Navigation ---
-
   Future<void> navigateTo(String path, {FileAccessMode? forcedMode}) async {
     final pathChanged = path != _currentPath;
     _lastForcedMode = forcedMode;

@@ -59,48 +59,38 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              '启用高级访问模式后，您可以通过特殊的文件访问通道打开受保护或受限目录中的 SQLite 数据库文件。',
+              '启用高级访问模式后，您可以通过特殊的文件访问通道打开受保护或受限目录中的 SQLite 数据库文件。授权状态与是否参与访问链已分离：即使已授权，关闭开关后也不会使用该通道。',
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
           const SizedBox(height: 8),
-
-          // All files access
           AccessSwitchTile(
             capability: capabilities[FileAccessMode.manageAllFiles]!,
             onToggle: () {
               final nextEnabled =
                   !capabilities[FileAccessMode.manageAllFiles]!.enabled;
               controller.setCapabilityEnabled(
-                  FileAccessMode.manageAllFiles, nextEnabled);
+                FileAccessMode.manageAllFiles,
+                nextEnabled,
+              );
             },
             onAction: () => controller.openManageAllFilesSettings(),
           ),
-
-          // Root
           AccessSwitchTile(
             capability: capabilities[FileAccessMode.root]!,
             onToggle: () {
               final nextEnabled = !capabilities[FileAccessMode.root]!.enabled;
               controller.setCapabilityEnabled(FileAccessMode.root, nextEnabled);
-              if (nextEnabled) {
-                controller.checkAllStatuses(forceRefresh: true);
-              }
             },
             onAction: () => controller.checkAllStatuses(forceRefresh: true),
           ),
-
-          // Shizuku
           AccessSwitchTile(
             capability: capabilities[FileAccessMode.shizuku]!,
             onToggle: () {
               final nextEnabled =
                   !capabilities[FileAccessMode.shizuku]!.enabled;
               controller.setCapabilityEnabled(FileAccessMode.shizuku, nextEnabled);
-              if (nextEnabled) {
-                controller.checkAllStatuses(forceRefresh: true);
-              }
             },
             onAction: () async {
               final granted = await controller.requestShizukuPermission();
@@ -112,7 +102,6 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
               );
             },
           ),
-
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -127,12 +116,12 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
                   '仅在您完全了解风险的情况下启用。\n'
                   '修改应用私有数据可能导致该应用工作异常或数据丢失。',
                   style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant),
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

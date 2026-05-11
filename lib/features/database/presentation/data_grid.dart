@@ -23,9 +23,22 @@ class DataGrid extends ConsumerStatefulWidget {
 }
 
 class _DataGridState extends ConsumerState<DataGrid> {
+  static const double _indexColumnWidth = 88;
+  static const double _dataColumnWidth = 240;
+  static const double _minDataColumnWidth = 140;
+  static const double _maxDataColumnWidth = 520;
+  static const double _actionColumnWidth = 152;
+  static const double _headerHeight = 48;
+  static const double _rowHeight = 64;
+
   final _searchController = TextEditingController();
   final _verticalController = ScrollController();
   final _horizontalController = ScrollController();
+  final Map<String, double> _columnWidths = {};
+
+  String? _resizingColumn;
+  double _resizeStartDx = 0;
+  double _resizeStartWidth = _dataColumnWidth;
 
   @override
   void dispose() {
@@ -116,6 +129,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
     }
 
     final columns = page.columns;
+    _ensureColumnWidths(columns);
 
     return Column(
       children: [
@@ -145,7 +159,6 @@ class _DataGridState extends ConsumerState<DataGrid> {
             onChanged: (v) => db.setSearch(v),
           ),
         ),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
@@ -164,94 +177,288 @@ class _DataGridState extends ConsumerState<DataGrid> {
             ],
           ),
         ),
-
         Expanded(
-          child: SingleChildScrollView(
-            controller: _horizontalController,
-            scrollDirection: Axis.horizontal,
-            child: SingleChildScrollView(
-              controller: _verticalController,
-              child: DataTable(
-                columnSpacing: 24,
-                horizontalMargin: 12,
-                dataRowMinHeight: 40,
-                dataRowMaxHeight: 84,
-                columns: [
-                  DataColumn(
-                    label: Text('#',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  for (final col in columns)
-                    DataColumn(
-                      label: Text(col.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  const DataColumn(label: Text('操作')),
-                ],
-                rows: [
-                  for (final row in page.rows)
-                    DataRow(
-                      onLongPress: widget.onOpenRowDetail == null
-                          ? null
-                          : () => widget.onOpenRowDetail?.call(row),
-                      cells: [
-                        DataCell(Text('${row['rowid'] ?? ''}')),
-                        for (final col in columns)
-                          DataCell(
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 260),
-                              child: Text(
-                                '${row[col.name] ?? ''}',
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 3,
-                              ),
-                            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final contentWidth = _tableWidth(columns);
+              final viewportWidth =
+                  contentWidth < constraints.maxWidth ? constraints.maxWidth : contentWidth;
+              return SingleChildScrollView(
+                controller: _horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: viewportWidth,
+                  height: constraints.maxHeight,
+                  child: Column(
+                    children: [
+                      _buildHeaderRow(context, theme, columns),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.separated(
+                          controller: _verticalController,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          itemCount: page.rows.length,
+                          separatorBuilder: (_, separatorIndex) => Divider(
+                            height: 1,
+                            thickness: 0.6,
+                            color: theme.dividerColor.withValues(alpha: 0.4),
                           ),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.visibility_outlined, size: 18),
-                                tooltip: '详情',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: widget.onOpenRowDetail == null
-                                    ? null
-                                    : () => widget.onOpenRowDetail?.call(row),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 18),
-                                onPressed: widget.onEditRow == null
-                                    ? null
-                                    : () => widget.onEditRow?.call(row),
-                                tooltip: '编辑',
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.delete_outline,
-                                  size: 18,
-                                  color: theme.colorScheme.error,
-                                ),
-                                onPressed: widget.onDeleteRow == null
-                                    ? null
-                                    : () => widget.onDeleteRow?.call(row),
-                                tooltip: '删除',
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
+                          itemBuilder: (context, index) {
+                            final row = page.rows[index];
+                            return _buildDataRow(context, theme, columns, row);
+                          },
                         ),
-                      ],
-                    ),
-                ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        _buildPaginationBar(context, db, page),
+      ],
+    );
+  }
+
+  void _ensureColumnWidths(List<TableColumnInfo> columns) {
+    for (final column in columns) {
+      _columnWidths.putIfAbsent(column.name, () => _dataColumnWidth);
+    }
+    if (_resizingColumn != null &&
+        columns.every((column) => column.name != _resizingColumn)) {
+      _resizingColumn = null;
+    }
+  }
+
+  double _columnWidthFor(String columnName) {
+    return _columnWidths[columnName] ?? _dataColumnWidth;
+  }
+
+  double _tableWidth(List<TableColumnInfo> columns) {
+    return _indexColumnWidth +
+        _actionColumnWidth +
+        columns.fold<double>(0, (sum, column) => sum + _columnWidthFor(column.name));
+  }
+
+  Widget _buildHeaderRow(
+    BuildContext context,
+    ThemeData theme,
+    List<TableColumnInfo> columns,
+  ) {
+    final color = theme.colorScheme.surfaceContainerHighest;
+    return Container(
+      height: _headerHeight,
+      color: color,
+      child: Row(
+        children: [
+          _buildHeaderCell('#', width: _indexColumnWidth),
+          for (final col in columns)
+            _buildResizableHeaderCell(context, theme, col),
+          _buildHeaderCell('操作', width: _actionColumnWidth, alignEnd: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderCell(
+    String text, {
+    required double width,
+    bool alignEnd = false,
+  }) {
+    return SizedBox(
+      width: width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Align(
+          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResizableHeaderCell(
+    BuildContext context,
+    ThemeData theme,
+    TableColumnInfo column,
+  ) {
+    final width = _columnWidthFor(column.name);
+    final isResizing = _resizingColumn == column.name;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (details) {
+        setState(() {
+          _resizingColumn = column.name;
+          _resizeStartDx = details.globalPosition.dx;
+          _resizeStartWidth = _columnWidthFor(column.name);
+        });
+      },
+      onLongPressMoveUpdate: (details) {
+        if (_resizingColumn != column.name) return;
+        final delta = details.globalPosition.dx - _resizeStartDx;
+        final nextWidth = (_resizeStartWidth + delta).clamp(
+          _minDataColumnWidth,
+          _maxDataColumnWidth,
+        );
+        setState(() {
+          _columnWidths[column.name] = nextWidth;
+        });
+      },
+      onLongPressEnd: (_) {
+        if (_resizingColumn == column.name) {
+          setState(() {
+            _resizingColumn = null;
+          });
+        }
+      },
+      child: Container(
+        width: width,
+        height: _headerHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: isResizing
+              ? Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  ),
+                )
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                column.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.drag_indicator,
+              size: 14,
+              color: isResizing
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataRow(
+    BuildContext context,
+    ThemeData theme,
+    List<TableColumnInfo> columns,
+    Map<String, dynamic> row,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onLongPress: widget.onOpenRowDetail == null
+            ? null
+            : () => widget.onOpenRowDetail?.call(row),
+        child: SizedBox(
+          height: _rowHeight,
+          child: Row(
+            children: [
+              _buildValueCell(
+                text: '${row['rowid'] ?? ''}',
+                width: _indexColumnWidth,
+                bold: true,
+              ),
+              for (final col in columns)
+                _buildValueCell(
+                  text: '${row[col.name] ?? ''}',
+                  width: _columnWidthFor(col.name),
+                ),
+              _buildActionCell(theme, row),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildValueCell({
+    required String text,
+    required double width,
+    bool bold = false,
+  }) {
+    return SizedBox(
+      width: width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ),
+      ),
+    );
+  }
 
-        _buildPaginationBar(context, db, page),
-      ],
+  Widget _buildActionCell(ThemeData theme, Map<String, dynamic> row) {
+    return SizedBox(
+      width: _actionColumnWidth,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              tooltip: '详情',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+              onPressed: widget.onOpenRowDetail == null
+                  ? null
+                  : () => widget.onOpenRowDetail?.call(row),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 18),
+              onPressed: widget.onEditRow == null
+                  ? null
+                  : () => widget.onEditRow?.call(row),
+              tooltip: '编辑',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: theme.colorScheme.error,
+              ),
+              onPressed: widget.onDeleteRow == null
+                  ? null
+                  : () => widget.onDeleteRow?.call(row),
+              tooltip: '删除',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

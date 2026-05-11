@@ -6,8 +6,22 @@ import '../../core/file_session/android_special_file_access.dart';
 import '../../core/file_session/database_file_access.dart';
 import '../../models/database_models.dart';
 
+class AccessModeUnavailableException implements Exception {
+  final FileAccessMode mode;
+  final String message;
+
+  const AccessModeUnavailableException(this.mode, this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Manages Android file access modes, permissions, and directory browsing state.
 class FileAccessController extends ChangeNotifier {
+  static const _manageAllFilesPrefKey = 'manage_all_files_enabled';
+  static const _rootPrefKey = 'root_mode_enabled';
+  static const _shizukuPrefKey = 'shizuku_mode_enabled';
+
   final AndroidSpecialFileAccess _access = AndroidSpecialFileAccess();
   final NormalFileAccess _normalAccess = NormalFileAccess();
 
@@ -15,8 +29,6 @@ class FileAccessController extends ChangeNotifier {
   NormalFileAccess get normalAccess => _normalAccess;
 
   bool _initialized = false;
-
-  // --- State ---
 
   final Map<FileAccessMode, AccessCapability> capabilities = {
     FileAccessMode.manageAllFiles: const AccessCapability(
@@ -36,8 +48,6 @@ class FileAccessController extends ChangeNotifier {
     ),
   };
 
-  // --- Preferences ---
-
   /// Ensure saved access preferences are loaded at least once before any file
   /// operation. Safe to call multiple times — loads only on first invocation.
   Future<void> ensureInitialized() async {
@@ -48,40 +58,27 @@ class FileAccessController extends ChangeNotifier {
 
   Future<void> loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    final rootEnabled = prefs.getBool('root_mode_enabled') ?? false;
-    final shizukuEnabled = prefs.getBool('shizuku_mode_enabled') ?? false;
-    final allFilesEnabled = prefs.getBool('manage_all_files_enabled') ?? false;
-
-    capabilities[FileAccessMode.root] =
-        capabilities[FileAccessMode.root]!.copyWith(enabled: rootEnabled);
+    capabilities[FileAccessMode.root] = capabilities[FileAccessMode.root]!
+        .copyWith(enabled: prefs.getBool(_rootPrefKey) ?? false);
     capabilities[FileAccessMode.shizuku] = capabilities[FileAccessMode.shizuku]!
-        .copyWith(enabled: shizukuEnabled);
-    capabilities[FileAccessMode.manageAllFiles] = capabilities[
-            FileAccessMode.manageAllFiles]!
-        .copyWith(enabled: allFilesEnabled);
+        .copyWith(enabled: prefs.getBool(_shizukuPrefKey) ?? false);
+    capabilities[FileAccessMode.manageAllFiles] =
+        capabilities[FileAccessMode.manageAllFiles]!
+            .copyWith(enabled: prefs.getBool(_manageAllFilesPrefKey) ?? false);
     notifyListeners();
   }
 
   Future<void> setCapabilityEnabled(FileAccessMode mode, bool enabled) async {
     capabilities[mode] = capabilities[mode]!.copyWith(enabled: enabled);
     final prefs = await SharedPreferences.getInstance();
-    switch (mode) {
-      case FileAccessMode.root:
-        await prefs.setBool('root_mode_enabled', enabled);
-      case FileAccessMode.shizuku:
-        await prefs.setBool('shizuku_mode_enabled', enabled);
-      case FileAccessMode.manageAllFiles:
-        await prefs.setBool('manage_all_files_enabled', enabled);
-      default:
-        break;
+    final key = _preferenceKeyForMode(mode);
+    if (key != null) {
+      await prefs.setBool(key, enabled);
     }
     notifyListeners();
   }
 
-  // --- Status checks ---
-
   Future<void> checkAllStatuses({bool forceRefresh = false}) async {
-    // Mark all as checking
     for (final mode in capabilities.keys) {
       capabilities[mode] = capabilities[mode]!.copyWith(isChecking: true);
     }
@@ -90,40 +87,51 @@ class FileAccessController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // All files access — runtime grant, reflects real-time state
       final hasAllFiles = await _access.hasManageAllFilesAccess();
-      capabilities[FileAccessMode.manageAllFiles] = capabilities[
-              FileAccessMode.manageAllFiles]!
-          .copyWith(
-        enabled: hasAllFiles,
+      final allFilesEnabled = _storedEnabledWithFallback(
+        prefs,
+        _manageAllFilesPrefKey,
+        fallback: hasAllFiles,
+      );
+      capabilities[FileAccessMode.manageAllFiles] =
+          capabilities[FileAccessMode.manageAllFiles]!.copyWith(
+        enabled: allFilesEnabled,
+        available: hasAllFiles,
         statusText: hasAllFiles ? '已授权' : '未授权',
         isChecking: false,
       );
-      await prefs.setBool('manage_all_files_enabled', hasAllFiles);
+      await _persistDefaultIfMissing(
+        prefs,
+        _manageAllFilesPrefKey,
+        allFilesEnabled,
+      );
 
-      // Root: auto-enable on success, but keep saved enabled on failure
       final hasRoot = await _access.hasRootAccess(forceRefresh: forceRefresh);
-      final rootWasEnabled =
-          prefs.getBool('root_mode_enabled') ?? false;
-      if (hasRoot) {
-        await prefs.setBool('root_mode_enabled', true);
-      }
+      final rootEnabled = _storedEnabledWithFallback(
+        prefs,
+        _rootPrefKey,
+        fallback: hasRoot,
+      );
       capabilities[FileAccessMode.root] = capabilities[FileAccessMode.root]!
           .copyWith(
-        enabled: hasRoot ? true : rootWasEnabled,
+        enabled: rootEnabled,
+        available: hasRoot,
         statusText: hasRoot ? 'Root 可用' : 'Root 不可用',
         isChecking: false,
       );
+      await _persistDefaultIfMissing(prefs, _rootPrefKey, rootEnabled);
 
-      // Shizuku: auto-enable on granted, but keep saved enabled on failure
       final shizukuStatus =
           await _access.getShizukuStatus(forceRefresh: forceRefresh);
       final installed = shizukuStatus['installed'] == true;
       final running = shizukuStatus['running'] == true;
       final granted = shizukuStatus['permissionGranted'] == true;
-      final shizukuWasEnabled =
-          prefs.getBool('shizuku_mode_enabled') ?? false;
-      String? statusText;
+      final shizukuEnabled = _storedEnabledWithFallback(
+        prefs,
+        _shizukuPrefKey,
+        fallback: granted,
+      );
+      String statusText;
       if (!installed) {
         statusText = '未安装 Shizuku';
       } else if (!running) {
@@ -132,15 +140,15 @@ class FileAccessController extends ChangeNotifier {
         statusText = '未授权';
       } else {
         statusText = '已授权';
-        await prefs.setBool('shizuku_mode_enabled', true);
       }
-      capabilities[FileAccessMode.shizuku] = capabilities[
-              FileAccessMode.shizuku]!
-          .copyWith(
-        enabled: granted ? true : shizukuWasEnabled,
+      capabilities[FileAccessMode.shizuku] =
+          capabilities[FileAccessMode.shizuku]!.copyWith(
+        enabled: shizukuEnabled,
+        available: granted,
         statusText: statusText,
         isChecking: false,
       );
+      await _persistDefaultIfMissing(prefs, _shizukuPrefKey, shizukuEnabled);
     } catch (e) {
       for (final mode in capabilities.keys) {
         capabilities[mode] = capabilities[mode]!.copyWith(isChecking: false);
@@ -149,50 +157,46 @@ class FileAccessController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Determine the effective access mode based on enabled capabilities and
-  /// the target path.
-  FileAccessMode effectiveModeForPath(String path) {
-    final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
-    final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
-    final allFilesEnabled =
-        capabilities[FileAccessMode.manageAllFiles]!.enabled;
-    final isProtectedPath =
-        path == '/data' ||
-        path == '/system' ||
-        path.startsWith('/data/') ||
-        path.startsWith('/system/');
-    final isAndroidDataPath = path.contains('/Android/data/');
-    final isStoragePath =
-        path.startsWith('/storage/') || path.startsWith('/sdcard/');
-
-    if (isProtectedPath && rootEnabled) {
-      return FileAccessMode.root;
+  bool canUseMode(FileAccessMode mode) {
+    if (mode == FileAccessMode.normal) {
+      return true;
     }
-    if (isAndroidDataPath) {
-      if (shizukuEnabled) {
-        return FileAccessMode.shizuku;
-      }
-      if (allFilesEnabled) {
-        return FileAccessMode.manageAllFiles;
-      }
-      if (rootEnabled) {
-        return FileAccessMode.root;
-      }
-    }
-    if (isStoragePath) {
-      if (allFilesEnabled) {
-        return FileAccessMode.manageAllFiles;
-      }
-      return FileAccessMode.normal;
-    }
-    if ((path == '/' || path.startsWith('/')) && rootEnabled) {
-      return FileAccessMode.root;
-    }
-    return FileAccessMode.normal;
+    final capability = capabilities[mode];
+    return capability != null && capability.enabled && capability.available;
   }
 
-  /// [forcedMode] — when non-null, try this mode first, while still allowing
-  /// root fallback for paths that root can access but normal/Shizuku cannot.
+  String accessModeUnavailableMessage(FileAccessMode mode) {
+    switch (mode) {
+      case FileAccessMode.root:
+        return 'Root 权限无/或未启用';
+      case FileAccessMode.shizuku:
+        return 'Shizuku 权限无/或未启用';
+      case FileAccessMode.manageAllFiles:
+        return '全部文件访问无/或未启用';
+      case FileAccessMode.normal:
+        return '普通目录访问不可用';
+    }
+  }
+
+  void _ensureModeUsableOrThrow(FileAccessMode mode) {
+    if (!canUseMode(mode)) {
+      throw AccessModeUnavailableException(
+        mode,
+        accessModeUnavailableMessage(mode),
+      );
+    }
+  }
+
+  FileAccessMode effectiveModeForPath(String path) {
+    final candidates = candidateModesForPath(path);
+    return candidates.isEmpty ? FileAccessMode.normal : candidates.first;
+  }
+
+  /// [forcedMode] — when non-null, try this mode first.
+  ///
+  /// Normal file browsing still prefers low-privilege modes for storage paths,
+  /// while protected absolute paths use the active privileged chain:
+  /// Root → Shizuku → 全部文件访问 → 普通模式。
   List<FileAccessMode> candidateModesForPath(String path,
       {FileAccessMode? forcedMode}) {
     final candidates = <FileAccessMode>[];
@@ -203,9 +207,12 @@ class FileAccessController extends ChangeNotifier {
       }
     }
 
-    final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
-    final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
-    final allFilesEnabled = capabilities[FileAccessMode.manageAllFiles]!.enabled;
+    void addIfActive(FileAccessMode mode) {
+      if (canUseMode(mode)) {
+        add(mode);
+      }
+    }
+
     final isProtectedPath =
         path == '/data' ||
         path == '/system' ||
@@ -215,45 +222,45 @@ class FileAccessController extends ChangeNotifier {
     final isStoragePath =
         path.startsWith('/storage/') || path.startsWith('/sdcard/');
     final isAbsolutePath = path == '/' || path.startsWith('/');
+    final isPrivilegedAbsolutePath =
+        isProtectedPath || (isAbsolutePath && !isStoragePath);
 
-    if (forcedMode == FileAccessMode.root) {
-      add(FileAccessMode.root);
+    if (forcedMode == FileAccessMode.root ||
+        forcedMode == FileAccessMode.shizuku) {
+      add(forcedMode!);
       return candidates;
     }
 
     if (forcedMode != null) {
       add(forcedMode);
-    } else if (isProtectedPath || (isAbsolutePath && !isStoragePath)) {
-      if (rootEnabled) {
-        add(FileAccessMode.root);
-      }
-      if (isAndroidDataPath && shizukuEnabled) {
-        add(FileAccessMode.shizuku);
-      }
-    } else {
-      add(effectiveModeForPath(path));
     }
 
-    if (isStoragePath && allFilesEnabled) {
-      add(FileAccessMode.manageAllFiles);
-    }
-
-    if (isAndroidDataPath && shizukuEnabled) {
-      add(FileAccessMode.shizuku);
-    }
-
-    final allowNormal =
-        forcedMode != FileAccessMode.shizuku &&
-        !isProtectedPath &&
-        !(forcedMode == FileAccessMode.manageAllFiles && !isStoragePath);
-    if (allowNormal) {
+    if (isPrivilegedAbsolutePath) {
+      addIfActive(FileAccessMode.root);
+      addIfActive(FileAccessMode.shizuku);
+      addIfActive(FileAccessMode.manageAllFiles);
       add(FileAccessMode.normal);
+      return candidates;
     }
 
-    if (rootEnabled) {
-      add(FileAccessMode.root);
+    add(FileAccessMode.normal);
+
+    if (isAndroidDataPath) {
+      addIfActive(FileAccessMode.manageAllFiles);
+      addIfActive(FileAccessMode.shizuku);
+      addIfActive(FileAccessMode.root);
+      return candidates;
     }
 
+    if (isStoragePath) {
+      addIfActive(FileAccessMode.manageAllFiles);
+      addIfActive(FileAccessMode.root);
+      return candidates;
+    }
+
+    addIfActive(FileAccessMode.manageAllFiles);
+    addIfActive(FileAccessMode.shizuku);
+    addIfActive(FileAccessMode.root);
     return candidates;
   }
 
@@ -269,16 +276,18 @@ class FileAccessController extends ChangeNotifier {
     }).toList();
   }
 
-  // --- File operations ---
-
-  /// List directory using the appropriate access mode.
   Future<List<DirectoryEntry>> listDirectory(String path,
       {FileAccessMode? forcedMode}) async {
     await ensureInitialized();
+    if (forcedMode != null && forcedMode != FileAccessMode.normal) {
+      _ensureModeUsableOrThrow(forcedMode);
+    }
+
     final candidates = candidateModesForPath(path, forcedMode: forcedMode);
     final errors = <String>[];
     List<DirectoryEntry>? emptyFallback;
     List<DirectoryEntry>? partialFallback;
+
     for (var i = 0; i < candidates.length; i++) {
       final mode = candidates[i];
       try {
@@ -286,18 +295,20 @@ class FileAccessController extends ChangeNotifier {
           path,
           await _access.listDirectory(path, mode: mode),
         );
-        final hasLaterPrivilegedMode = candidates
+        final hasLaterMoreCapableMode = candidates
             .skip(i + 1)
-            .any((m) => m == FileAccessMode.root || m == FileAccessMode.shizuku);
+            .any((m) => _modePrivilegeRank(m) > _modePrivilegeRank(mode));
         final suspiciousEmpty = entries.isEmpty &&
-            hasLaterPrivilegedMode &&
+            hasLaterMoreCapableMode &&
             (mode == FileAccessMode.normal ||
                 mode == FileAccessMode.manageAllFiles) &&
+            (forcedMode != FileAccessMode.root &&
+                forcedMode != FileAccessMode.shizuku) &&
             (forcedMode != null ||
                 path.contains('/Android/data/') ||
                 path.startsWith('/storage/'));
         final preferPrivilegedStorageListing = entries.isNotEmpty &&
-            hasLaterPrivilegedMode &&
+            hasLaterMoreCapableMode &&
             (mode == FileAccessMode.normal ||
                 mode == FileAccessMode.manageAllFiles) &&
             forcedMode != FileAccessMode.root &&
@@ -321,17 +332,20 @@ class FileAccessController extends ChangeNotifier {
     if (partialFallback != null) {
       return partialFallback;
     }
-    if (emptyFallback != null && errors.every((e) => e.contains('empty result'))) {
+    if (emptyFallback != null &&
+        errors.every((e) => e.contains('empty result'))) {
       return emptyFallback;
     }
-    throw Exception(
-        'Failed to list directory: $path\n${errors.join('\n')}');
+    throw Exception('Failed to list directory: $path\n${errors.join('\n')}');
   }
 
-  /// Open a database file using the appropriate access mode.
   Future<DatabaseOpenSession> openDatabaseFile(String sourcePath,
       {FileAccessMode? forcedMode}) async {
     await ensureInitialized();
+    if (forcedMode != null && forcedMode != FileAccessMode.normal) {
+      _ensureModeUsableOrThrow(forcedMode);
+    }
+
     final candidates =
         candidateModesForPath(sourcePath, forcedMode: forcedMode);
     final errors = <String>[];
@@ -351,18 +365,14 @@ class FileAccessController extends ChangeNotifier {
         errors.add('${fileAccessModeName(mode)}: $error');
       }
     }
-    throw Exception(
-        'Failed to open database: $sourcePath\n${errors.join('\n')}');
+    throw Exception('Failed to open database: $sourcePath\n${errors.join('\n')}');
   }
 
-  /// Save working copy back to source using the appropriate access mode.
   Future<void> saveBackToSource(String workPath, String sourcePath) async {
     await ensureInitialized();
     final mode = effectiveModeForPath(sourcePath);
     await _access.writeBackToSource(workPath, sourcePath, mode: mode);
   }
-
-  // --- Convenience methods for UI ---
 
   Future<void> openManageAllFilesSettings() =>
       _access.openManageAllFilesAccessSettings();
@@ -371,6 +381,53 @@ class FileAccessController extends ChangeNotifier {
 
   Future<bool> requestShizukuPermission() =>
       _access.requestShizukuPermission();
+
+  String? _preferenceKeyForMode(FileAccessMode mode) {
+    switch (mode) {
+      case FileAccessMode.manageAllFiles:
+        return _manageAllFilesPrefKey;
+      case FileAccessMode.root:
+        return _rootPrefKey;
+      case FileAccessMode.shizuku:
+        return _shizukuPrefKey;
+      case FileAccessMode.normal:
+        return null;
+    }
+  }
+
+  bool _storedEnabledWithFallback(
+    SharedPreferences prefs,
+    String key, {
+    required bool fallback,
+  }) {
+    if (prefs.containsKey(key)) {
+      return prefs.getBool(key) ?? false;
+    }
+    return fallback;
+  }
+
+  Future<void> _persistDefaultIfMissing(
+    SharedPreferences prefs,
+    String key,
+    bool value,
+  ) async {
+    if (!prefs.containsKey(key)) {
+      await prefs.setBool(key, value);
+    }
+  }
+
+  int _modePrivilegeRank(FileAccessMode mode) {
+    switch (mode) {
+      case FileAccessMode.normal:
+        return 0;
+      case FileAccessMode.manageAllFiles:
+        return 1;
+      case FileAccessMode.shizuku:
+        return 2;
+      case FileAccessMode.root:
+        return 3;
+    }
+  }
 }
 
 final fileAccessControllerProvider =
