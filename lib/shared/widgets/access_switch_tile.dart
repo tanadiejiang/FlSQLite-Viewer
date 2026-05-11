@@ -108,7 +108,7 @@ class AccessSwitchTile extends ConsumerWidget {
       case FileAccessMode.root:
         return '检测 Root 状态';
       case FileAccessMode.shizuku:
-        return '打开 Shizuku';
+        return '请求 Shizuku 授权';
       default:
         return '';
     }

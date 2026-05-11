@@ -102,7 +102,15 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
                 controller.checkAllStatuses(forceRefresh: true);
               }
             },
-            onAction: () => controller.openShizukuApp(),
+            onAction: () async {
+              final granted = await controller.requestShizukuPermission();
+              if (!context.mounted) return;
+              await controller.checkAllStatuses(forceRefresh: true);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(granted ? 'Shizuku 已授权' : 'Shizuku 未授权')),
+              );
+            },
           ),
 
           const SizedBox(height: 16),

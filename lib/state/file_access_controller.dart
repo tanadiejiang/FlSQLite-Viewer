@@ -152,8 +152,8 @@ class FileAccessController extends ChangeNotifier {
   /// Determine the effective access mode based on enabled capabilities and
   /// the target path.
   FileAccessMode effectiveModeForPath(String path) {
-    if (capabilities[FileAccessMode.root]!.enabled &&
-        (path.startsWith('/data/') || path.startsWith('/system/'))) {
+    final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
+    if (rootEnabled && path.startsWith('/')) {
       return FileAccessMode.root;
     }
     if (capabilities[FileAccessMode.shizuku]!.enabled &&
@@ -167,8 +167,8 @@ class FileAccessController extends ChangeNotifier {
     return FileAccessMode.normal;
   }
 
-  /// [forcedMode] — when non-null, use this mode first (and exclusively for
-  /// protected paths where normal would only obscure the real error).
+  /// [forcedMode] — when non-null, try this mode first, while still allowing
+  /// root fallback for paths that root can access but normal/Shizuku cannot.
   List<FileAccessMode> candidateModesForPath(String path,
       {FileAccessMode? forcedMode}) {
     final candidates = <FileAccessMode>[];
@@ -179,50 +179,39 @@ class FileAccessController extends ChangeNotifier {
       }
     }
 
-    // Forced mode always goes first (even if capability shows disabled —
-    // the caller has signalled intent, e.g. from a test-path button).
+    final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
+    final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
+    final allFilesEnabled = capabilities[FileAccessMode.manageAllFiles]!.enabled;
+    final isProtectedPath = path.startsWith('/data/') || path.startsWith('/system/');
+    final isAndroidDataPath = path.contains('/Android/data/');
+    final isStoragePath = path.startsWith('/storage/') || path.startsWith('/sdcard/');
+
     if (forcedMode != null) {
       add(forcedMode);
     }
 
-    add(effectiveModeForPath(path));
-
-    if (path.startsWith('/storage/')) {
-      if (capabilities[FileAccessMode.manageAllFiles]!.enabled) {
-        add(FileAccessMode.manageAllFiles);
-      }
-      if (capabilities[FileAccessMode.shizuku]!.enabled) {
-        add(FileAccessMode.shizuku);
-      }
-      if (capabilities[FileAccessMode.root]!.enabled) {
-        add(FileAccessMode.root);
-      }
-      // For /storage/ paths, normal is still a valid fallback.
-    }
-
-    if (path.contains('/Android/data/') &&
-        capabilities[FileAccessMode.shizuku]!.enabled) {
-      add(FileAccessMode.shizuku);
-    }
-
-    final isProtectedPath =
-        path.startsWith('/data/') || path.startsWith('/system/');
-    final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
-    final shizukuPath = path.contains('/Android/data/');
-    final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
-
-    if (isProtectedPath && rootEnabled) {
+    // In root mode, root is the universal privileged backend: it must be able
+    // to browse both private app data (/data/user/0) and scoped storage paths.
+    if (rootEnabled || forcedMode == FileAccessMode.root) {
       add(FileAccessMode.root);
     }
 
-    // Add normal fallback only when it's safe — never append it after root or
-    // shizuku for paths that are clearly incapable of working via normal.
-    final skipNormal = (isProtectedPath && rootEnabled) ||
-        (shizukuPath && shizukuEnabled) ||
-        forcedMode != null &&
-            forcedMode != FileAccessMode.normal &&
-            forcedMode != FileAccessMode.manageAllFiles;
-    if (!skipNormal) {
+    if (forcedMode == null) {
+      add(effectiveModeForPath(path));
+    }
+
+    if (isStoragePath && allFilesEnabled) {
+      add(FileAccessMode.manageAllFiles);
+    }
+
+    if (isAndroidDataPath && shizukuEnabled) {
+      add(FileAccessMode.shizuku);
+    }
+
+    final normalCannotWork = isProtectedPath || isAndroidDataPath;
+    final forcedPrivileged = forcedMode == FileAccessMode.root ||
+        forcedMode == FileAccessMode.shizuku;
+    if (!normalCannotWork && !forcedPrivileged) {
       add(FileAccessMode.normal);
     }
     return candidates;
@@ -248,13 +237,35 @@ class FileAccessController extends ChangeNotifier {
     await ensureInitialized();
     final candidates = candidateModesForPath(path, forcedMode: forcedMode);
     final errors = <String>[];
-    for (final mode in candidates) {
+    List<DirectoryEntry>? emptyFallback;
+    for (var i = 0; i < candidates.length; i++) {
+      final mode = candidates[i];
       try {
-        final entries = await _access.listDirectory(path, mode: mode);
-        return _withFullPaths(path, entries);
+        final entries = _withFullPaths(
+          path,
+          await _access.listDirectory(path, mode: mode),
+        );
+        final hasLaterPrivilegedMode = candidates
+            .skip(i + 1)
+            .any((m) => m == FileAccessMode.root || m == FileAccessMode.shizuku);
+        final suspiciousEmpty = entries.isEmpty &&
+            hasLaterPrivilegedMode &&
+            (mode == FileAccessMode.normal ||
+                mode == FileAccessMode.manageAllFiles) &&
+            (forcedMode != null ||
+                path.contains('/Android/data/') ||
+                path.startsWith('/storage/'));
+        if (!suspiciousEmpty) {
+          return entries;
+        }
+        emptyFallback ??= entries;
+        errors.add('${fileAccessModeName(mode)}: empty result, trying privileged fallback');
       } catch (error) {
         errors.add('${fileAccessModeName(mode)}: $error');
       }
+    }
+    if (emptyFallback != null && errors.every((e) => e.contains('empty result'))) {
+      return emptyFallback;
     }
     throw Exception(
         'Failed to list directory: $path\n${errors.join('\n')}');

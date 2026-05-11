@@ -54,18 +54,21 @@ object RootFileAccess {
         return granted
     }
 
+    private fun rootProcess(command: String): Process =
+        Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+
     fun listDirectoryEntries(executor: ExecutorService, path: String): List<Map<String, String>> =
-        fileListAdapter(executor, path) { command -> Runtime.getRuntime().exec(arrayOf("su", "-c", command)) }
+        fileListAdapter(executor, path) { command -> rootProcess(command) }
 
     fun readFile(executor: ExecutorService, path: String): ByteArray =
-        fileReadAdapter(executor, path) { command -> Runtime.getRuntime().exec(arrayOf("su", "-c", command)) }
+        fileReadAdapter(executor, path) { command -> rootProcess(command) }
 
     fun writeFile(executor: ExecutorService, path: String, bytes: ByteArray) {
-        fileWriteAdapter(executor, path, bytes) { command -> Runtime.getRuntime().exec(arrayOf("su", "-c", command)) }
+        fileWriteAdapter(executor, path, bytes) { command -> rootProcess(command) }
     }
 
     fun exists(executor: ExecutorService, path: String): Boolean =
-        fileExistsAdapter(executor, path) { command -> Runtime.getRuntime().exec(arrayOf("su", "-c", command)) }
+        fileExistsAdapter(executor, path) { command -> rootProcess(command) }
 
     // Shared helpers
 
@@ -112,8 +115,12 @@ object RootFileAccess {
     internal fun candidatePaths(path: String): LinkedHashSet<String> {
         val normalized = path.trim().ifEmpty { "/" }
         val candidates = linkedSetOf(normalized)
+        if (normalized == "/data/user/0") candidates.add("/data/data")
+        if (normalized == "/data/data") candidates.add("/data/user/0")
         if (normalized.startsWith("/data/user/0/")) candidates.add(normalized.replaceFirst("/data/user/0/", "/data/data/"))
         if (normalized.startsWith("/data/data/")) candidates.add(normalized.replaceFirst("/data/data/", "/data/user/0/"))
+        if (normalized == "/storage/emulated/0") candidates.add("/sdcard")
+        if (normalized == "/sdcard") candidates.add("/storage/emulated/0")
         if (normalized.startsWith("/storage/emulated/0/")) candidates.add(normalized.replaceFirst("/storage/emulated/0/", "/sdcard/"))
         if (normalized.startsWith("/sdcard/")) candidates.add(normalized.replaceFirst("/sdcard/", "/storage/emulated/0/"))
         return candidates
@@ -131,7 +138,23 @@ object RootFileAccess {
         val candidates = candidatePaths(path).toList()
         val errors = mutableListOf<String>()
         for (candidate in candidates) {
-            val command = "if [ -d ${shellEscape(candidate)} ]; then cd ${shellEscape(candidate)} && for e in ./* ./.[!.]* ./..?*; do [ -e \"\$e\" ] || continue; name=\${e#./}; if [ -d \"\$e\" ]; then printf 'd\\t%s\\n' \"\$name\"; elif [ -f \"\$e\" ]; then printf 'f\\t%s\\n' \"\$name\"; fi; done; else echo __FLSQL_NODIR__ 1>&2; exit 2; fi"
+            val command = """
+                if [ -d ${shellEscape(candidate)} ]; then
+                  cd ${shellEscape(candidate)} || exit 2
+                  for e in ./* ./.[!.]* ./..?*; do
+                    [ -e "${'$'}e" ] || continue
+                    name=${'$'}{e#./}
+                    if [ -d "${'$'}e" ]; then
+                      printf 'd\t%s\n' "${'$'}name"
+                    elif [ -f "${'$'}e" ]; then
+                      printf 'f\t%s\n' "${'$'}name"
+                    fi
+                  done
+                else
+                  echo __FLSQL_NODIR__ 1>&2
+                  exit 2
+                fi
+            """.trimIndent()
             val result = executeTextProcess(executor, startProcess(command), PROCESS_TIMEOUT_MS)
             if (result.exitCode == 0) {
                 return result.stdout.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.mapNotNull { line ->

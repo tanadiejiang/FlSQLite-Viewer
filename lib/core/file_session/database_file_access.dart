@@ -75,9 +75,11 @@ class NormalFileAccess implements DatabaseFileAccess {
   Future<List<DirectoryEntry>> listDirectory(String dirPath,
       {FileAccessMode mode = FileAccessMode.normal}) async {
     final dir = Directory(dirPath);
-    if (!await dir.exists()) return [];
+    if (!await dir.exists()) {
+      throw FileSystemException('Directory does not exist or is inaccessible', dirPath);
+    }
     final entries = <DirectoryEntry>[];
-    await for (final entity in dir.list()) {
+    await for (final entity in dir.list(followLinks: false)) {
       entries.add(DirectoryEntry(
         name: p.basename(entity.path),
         isDirectory: entity is Directory,

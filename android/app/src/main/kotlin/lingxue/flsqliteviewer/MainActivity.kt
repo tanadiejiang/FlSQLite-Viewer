@@ -144,7 +144,11 @@ class MainActivity : FlutterActivity() {
         storageExecutor.execute {
             runCatching { block() }
                 .onSuccess { value -> mainHandler.post { result.success(value) } }
-                .onFailure { error -> mainHandler.post { result.error(errorCode, error.message ?: fallbackMessage, null) } }
+                .onFailure { error ->
+                    val message = error.message ?: "$fallbackMessage: ${error::class.java.simpleName}"
+                    Log.w(TAG, "$errorCode: $message", error)
+                    mainHandler.post { result.error(errorCode, message, error.stackTraceToString()) }
+                }
         }
     }
 
