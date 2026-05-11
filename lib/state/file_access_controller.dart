@@ -225,13 +225,13 @@ class FileAccessController extends ChangeNotifier {
     final isPrivilegedAbsolutePath =
         isProtectedPath || (isAbsolutePath && !isStoragePath);
 
-    if (forcedMode == FileAccessMode.root ||
-        forcedMode == FileAccessMode.shizuku) {
+    if (forcedMode == FileAccessMode.root) {
       add(forcedMode!);
       return candidates;
     }
 
-    if (forcedMode != null) {
+    if (forcedMode != null &&
+        (forcedMode == FileAccessMode.normal || canUseMode(forcedMode))) {
       add(forcedMode);
     }
 
@@ -254,6 +254,7 @@ class FileAccessController extends ChangeNotifier {
 
     if (isStoragePath) {
       addIfActive(FileAccessMode.manageAllFiles);
+      addIfActive(FileAccessMode.shizuku);
       addIfActive(FileAccessMode.root);
       return candidates;
     }
@@ -279,8 +280,8 @@ class FileAccessController extends ChangeNotifier {
   Future<List<DirectoryEntry>> listDirectory(String path,
       {FileAccessMode? forcedMode}) async {
     await ensureInitialized();
-    if (forcedMode != null && forcedMode != FileAccessMode.normal) {
-      _ensureModeUsableOrThrow(forcedMode);
+    if (forcedMode == FileAccessMode.root) {
+      _ensureModeUsableOrThrow(forcedMode!);
     }
 
     final candidates = candidateModesForPath(path, forcedMode: forcedMode);
@@ -302,8 +303,7 @@ class FileAccessController extends ChangeNotifier {
             hasLaterMoreCapableMode &&
             (mode == FileAccessMode.normal ||
                 mode == FileAccessMode.manageAllFiles) &&
-            (forcedMode != FileAccessMode.root &&
-                forcedMode != FileAccessMode.shizuku) &&
+            forcedMode != FileAccessMode.root &&
             (forcedMode != null ||
                 path.contains('/Android/data/') ||
                 path.startsWith('/storage/'));
@@ -312,7 +312,6 @@ class FileAccessController extends ChangeNotifier {
             (mode == FileAccessMode.normal ||
                 mode == FileAccessMode.manageAllFiles) &&
             forcedMode != FileAccessMode.root &&
-            forcedMode != FileAccessMode.shizuku &&
             (path.startsWith('/storage/') || path.startsWith('/sdcard/'));
         if (!suspiciousEmpty && !preferPrivilegedStorageListing) {
           return entries;
@@ -342,8 +341,8 @@ class FileAccessController extends ChangeNotifier {
   Future<DatabaseOpenSession> openDatabaseFile(String sourcePath,
       {FileAccessMode? forcedMode}) async {
     await ensureInitialized();
-    if (forcedMode != null && forcedMode != FileAccessMode.normal) {
-      _ensureModeUsableOrThrow(forcedMode);
+    if (forcedMode == FileAccessMode.root) {
+      _ensureModeUsableOrThrow(forcedMode!);
     }
 
     final candidates =

@@ -115,11 +115,13 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                       final forcedMode = modeName != null
                           ? fileAccessModeFromName(modeName)
                           : null;
-                      if (forcedMode != null && !access.canUseMode(forcedMode)) {
+                      final strictMode = forcedMode;
+                      if (strictMode == FileAccessMode.root &&
+                          !access.canUseMode(strictMode!)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                                access.accessModeUnavailableMessage(forcedMode)),
+                            content: Text(access
+                                .accessModeUnavailableMessage(strictMode)),
                           ),
                         );
                         return;
