@@ -93,6 +93,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Wrap(
               spacing: 6,
+              runSpacing: 6,
               children: [
                 for (final tp in FileBrowserController.testPaths)
                   ActionChip(
@@ -114,6 +115,20 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                selected: browser.showDatabasesOnly,
+                onSelected: browser.setShowDatabasesOnly,
+                label: const Text('仅显示数据库'),
+                avatar: const Icon(Icons.storage, size: 16),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
           // Up button
           if (browser.currentPath != '/')
             ListTile(
@@ -128,23 +143,75 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : browser.errorMessage != null
                     ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline,
-                                size: 48, color: Colors.red),
-                            const SizedBox(height: 8),
-                            Text(browser.errorMessage!),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () => browser.retry(),
-                              child: const Text('重试'),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: Card.outlined(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Center(
+                                      child: Icon(Icons.error_outline,
+                                          size: 48, color: Colors.red),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      browser.errorSummary ?? '目录加载失败',
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    if (browser.errorDetails != null &&
+                                        browser.errorDetails !=
+                                            browser.errorSummary) ...[
+                                      const SizedBox(height: 8),
+                                      ExpansionTile(
+                                        tilePadding: EdgeInsets.zero,
+                                        childrenPadding: EdgeInsets.zero,
+                                        title: const Text('查看详情'),
+                                        children: [
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: theme.colorScheme
+                                                  .surfaceContainerLow,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: SelectableText(
+                                              browser.errorDetails!,
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    const SizedBox(height: 12),
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: ElevatedButton(
+                                        onPressed: () => browser.retry(),
+                                        child: const Text('重试'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       )
                     : browser.entries.isEmpty
-                        ? const Center(child: Text('目录为空'))
+                        ? Center(
+                            child: Text(
+                              browser.showDatabasesOnly
+                                  ? '当前目录无数据库文件'
+                                  : '目录为空',
+                            ),
+                          )
                         : ListView.builder(
                             itemCount: browser.entries.length,
                             itemBuilder: (context, index) {
@@ -153,8 +220,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                 entry: entry,
                                 onTap: () {
                                   if (entry.isDirectory) {
-                                    browser
-                                        .navigateTo(entry.fullPath);
+                                    browser.navigateTo(entry.fullPath);
                                   } else if (browser
                                       .isDatabaseFile(entry.name)) {
                                     widget.onDatabaseSelected

@@ -18,11 +18,18 @@ class FileBrowserController extends ChangeNotifier {
 
   List<DirectoryEntry> _allEntries = [];
   List<DirectoryEntry> get entries {
-    if (_filter.isEmpty) return _allEntries;
     final keyword = _filter.toLowerCase();
-    return _allEntries
-        .where((e) => e.name.toLowerCase().contains(keyword))
-        .toList();
+    return _allEntries.where((entry) {
+      final matchesFilter =
+          keyword.isEmpty || entry.name.toLowerCase().contains(keyword);
+      if (!matchesFilter) {
+        return false;
+      }
+      if (!_showDatabasesOnly) {
+        return true;
+      }
+      return entry.isDirectory || isDatabaseFile(entry.name);
+    }).toList();
   }
 
   List<DirectoryEntry> get directories =>
@@ -32,14 +39,21 @@ class FileBrowserController extends ChangeNotifier {
   String _filter = '';
   String get filter => _filter;
 
+  bool _showDatabasesOnly = false;
+  bool get showDatabasesOnly => _showDatabasesOnly;
+
   List<String> _recentPaths = [];
   List<String> get recentPaths => _recentPaths;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  String? _errorMessage;
-  String? get errorMessage => _errorMessage;
+  String? _errorSummary;
+  String? get errorMessage => _errorSummary;
+  String? get errorSummary => _errorSummary;
+
+  String? _errorDetails;
+  String? get errorDetails => _errorDetails;
 
   // --- Test path shortcuts ---
 
@@ -57,7 +71,6 @@ class FileBrowserController extends ChangeNotifier {
     {
       'label': '普通/备份目录',
       'path': '/storage/emulated/0/1/.1临时文件/download.db',
-      'mode': 'normal',
     },
   ];
 
@@ -69,7 +82,8 @@ class FileBrowserController extends ChangeNotifier {
   Future<void> navigateTo(String path, {FileAccessMode? forcedMode}) async {
     _lastForcedMode = forcedMode;
     _isLoading = true;
-    _errorMessage = null;
+    _errorSummary = null;
+    _errorDetails = null;
     notifyListeners();
 
     try {
@@ -82,7 +96,11 @@ class FileBrowserController extends ChangeNotifier {
           .candidateModesForPath(path, forcedMode: forcedMode)
           .map(fileAccessModeName)
           .join(' → ');
-      _errorMessage = 'Failed to list directory: $e\nTried modes: $modes';
+      final detail = '$e\nTried modes: $modes'
+          .replaceFirst('Exception: ', '')
+          .trim();
+      _errorDetails = detail;
+      _errorSummary = detail.split('\n').first.trim();
     }
 
     _isLoading = false;
@@ -102,6 +120,14 @@ class FileBrowserController extends ChangeNotifier {
 
   void setFilter(String filter) {
     _filter = filter;
+    notifyListeners();
+  }
+
+  void setShowDatabasesOnly(bool value) {
+    if (_showDatabasesOnly == value) {
+      return;
+    }
+    _showDatabasesOnly = value;
     notifyListeners();
   }
 
@@ -126,7 +152,8 @@ class FileBrowserController extends ChangeNotifier {
   }
 
   void clearError() {
-    _errorMessage = null;
+    _errorSummary = null;
+    _errorDetails = null;
     notifyListeners();
   }
 

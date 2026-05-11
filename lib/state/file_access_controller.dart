@@ -153,16 +153,40 @@ class FileAccessController extends ChangeNotifier {
   /// the target path.
   FileAccessMode effectiveModeForPath(String path) {
     final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
-    if (rootEnabled && path.startsWith('/')) {
+    final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
+    final allFilesEnabled =
+        capabilities[FileAccessMode.manageAllFiles]!.enabled;
+    final isProtectedPath =
+        path == '/data' ||
+        path == '/system' ||
+        path.startsWith('/data/') ||
+        path.startsWith('/system/');
+    final isAndroidDataPath = path.contains('/Android/data/');
+    final isStoragePath =
+        path.startsWith('/storage/') || path.startsWith('/sdcard/');
+
+    if (isProtectedPath && rootEnabled) {
       return FileAccessMode.root;
     }
-    if (capabilities[FileAccessMode.shizuku]!.enabled &&
-        path.contains('/Android/data/')) {
-      return FileAccessMode.shizuku;
+    if (isAndroidDataPath) {
+      if (shizukuEnabled) {
+        return FileAccessMode.shizuku;
+      }
+      if (allFilesEnabled) {
+        return FileAccessMode.manageAllFiles;
+      }
+      if (rootEnabled) {
+        return FileAccessMode.root;
+      }
     }
-    if (capabilities[FileAccessMode.manageAllFiles]!.enabled &&
-        path.startsWith('/storage/')) {
-      return FileAccessMode.manageAllFiles;
+    if (isStoragePath) {
+      if (allFilesEnabled) {
+        return FileAccessMode.manageAllFiles;
+      }
+      return FileAccessMode.normal;
+    }
+    if ((path == '/' || path.startsWith('/')) && rootEnabled) {
+      return FileAccessMode.root;
     }
     return FileAccessMode.normal;
   }
@@ -182,21 +206,31 @@ class FileAccessController extends ChangeNotifier {
     final rootEnabled = capabilities[FileAccessMode.root]!.enabled;
     final shizukuEnabled = capabilities[FileAccessMode.shizuku]!.enabled;
     final allFilesEnabled = capabilities[FileAccessMode.manageAllFiles]!.enabled;
-    final isProtectedPath = path.startsWith('/data/') || path.startsWith('/system/');
+    final isProtectedPath =
+        path == '/data' ||
+        path == '/system' ||
+        path.startsWith('/data/') ||
+        path.startsWith('/system/');
     final isAndroidDataPath = path.contains('/Android/data/');
-    final isStoragePath = path.startsWith('/storage/') || path.startsWith('/sdcard/');
+    final isStoragePath =
+        path.startsWith('/storage/') || path.startsWith('/sdcard/');
+    final isAbsolutePath = path == '/' || path.startsWith('/');
+
+    if (forcedMode == FileAccessMode.root) {
+      add(FileAccessMode.root);
+      return candidates;
+    }
 
     if (forcedMode != null) {
       add(forcedMode);
-    }
-
-    // In root mode, root is the universal privileged backend: it must be able
-    // to browse both private app data (/data/user/0) and scoped storage paths.
-    if (rootEnabled || forcedMode == FileAccessMode.root) {
-      add(FileAccessMode.root);
-    }
-
-    if (forcedMode == null) {
+    } else if (isProtectedPath || (isAbsolutePath && !isStoragePath)) {
+      if (rootEnabled) {
+        add(FileAccessMode.root);
+      }
+      if (isAndroidDataPath && shizukuEnabled) {
+        add(FileAccessMode.shizuku);
+      }
+    } else {
       add(effectiveModeForPath(path));
     }
 
@@ -208,12 +242,18 @@ class FileAccessController extends ChangeNotifier {
       add(FileAccessMode.shizuku);
     }
 
-    final normalCannotWork = isProtectedPath || isAndroidDataPath;
-    final forcedPrivileged = forcedMode == FileAccessMode.root ||
-        forcedMode == FileAccessMode.shizuku;
-    if (!normalCannotWork && !forcedPrivileged) {
+    final allowNormal =
+        forcedMode != FileAccessMode.shizuku &&
+        !isProtectedPath &&
+        !(forcedMode == FileAccessMode.manageAllFiles && !isStoragePath);
+    if (allowNormal) {
       add(FileAccessMode.normal);
     }
+
+    if (rootEnabled) {
+      add(FileAccessMode.root);
+    }
+
     return candidates;
   }
 
@@ -238,6 +278,7 @@ class FileAccessController extends ChangeNotifier {
     final candidates = candidateModesForPath(path, forcedMode: forcedMode);
     final errors = <String>[];
     List<DirectoryEntry>? emptyFallback;
+    List<DirectoryEntry>? partialFallback;
     for (var i = 0; i < candidates.length; i++) {
       final mode = candidates[i];
       try {
@@ -255,14 +296,30 @@ class FileAccessController extends ChangeNotifier {
             (forcedMode != null ||
                 path.contains('/Android/data/') ||
                 path.startsWith('/storage/'));
-        if (!suspiciousEmpty) {
+        final preferPrivilegedStorageListing = entries.isNotEmpty &&
+            hasLaterPrivilegedMode &&
+            (mode == FileAccessMode.normal ||
+                mode == FileAccessMode.manageAllFiles) &&
+            forcedMode != FileAccessMode.root &&
+            forcedMode != FileAccessMode.shizuku &&
+            (path.startsWith('/storage/') || path.startsWith('/sdcard/'));
+        if (!suspiciousEmpty && !preferPrivilegedStorageListing) {
           return entries;
         }
-        emptyFallback ??= entries;
-        errors.add('${fileAccessModeName(mode)}: empty result, trying privileged fallback');
+        if (preferPrivilegedStorageListing) {
+          partialFallback ??= entries;
+        } else {
+          emptyFallback ??= entries;
+        }
+        errors.add(preferPrivilegedStorageListing
+            ? '${fileAccessModeName(mode)}: partial visibility risk, trying privileged fallback'
+            : '${fileAccessModeName(mode)}: empty result, trying privileged fallback');
       } catch (error) {
         errors.add('${fileAccessModeName(mode)}: $error');
       }
+    }
+    if (partialFallback != null) {
+      return partialFallback;
     }
     if (emptyFallback != null && errors.every((e) => e.contains('empty result'))) {
       return emptyFallback;
