@@ -34,6 +34,9 @@ class AppStrings {
   String get fileBrowser => isZh ? '文件浏览器' : 'File Browser';
   String get advancedAccess => isZh ? '高级访问' : 'Advanced Access';
   String get addRow => isZh ? '新增行' : 'Add Row';
+  String get minimizeWindow => isZh ? '最小化' : 'Minimize';
+  String get maximizeOrRestoreWindow => isZh ? '最大化/还原' : 'Maximize/Restore';
+  String get closeWindow => isZh ? '关闭' : 'Close';
   String get homeSubtitle => isZh
       ? '跨平台 SQLite 数据库查看与编辑器'
       : 'Cross-platform SQLite database viewer and editor';

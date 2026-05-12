@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../features/android_access/presentation/android_access_page.dart';
 import '../features/database/presentation/data_grid.dart';
@@ -84,6 +85,27 @@ class _HomePageState extends ConsumerState<HomePage>
     super.dispose();
   }
 
+  Future<void> _invokeWindowControl(String method) async {
+    if (!Platform.isWindows) {
+      return;
+    }
+    switch (method) {
+      case 'minimize':
+        await windowManager.minimize();
+        break;
+      case 'maximizeOrRestore':
+        if (await windowManager.isMaximized()) {
+          await windowManager.restore();
+        } else {
+          await windowManager.maximize();
+        }
+        break;
+      case 'close':
+        await windowManager.close();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(databaseControllerProvider);
@@ -117,7 +139,21 @@ class _HomePageState extends ConsumerState<HomePage>
                   },
                 ),
           automaticallyImplyLeading: false,
-          title: null,
+          title: Platform.isWindows
+              ? DragToMoveArea(
+                  child: SizedBox(
+                    height: kToolbarHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        s.appName,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                )
+              : null,
           actions: [
             IconButton(
               icon: const Icon(Icons.folder_open),
@@ -142,6 +178,23 @@ class _HomePageState extends ConsumerState<HomePage>
                 tooltip: s.addRow,
                 onPressed: () => _showInsertDialog(context),
               ),
+            if (Platform.isWindows) ...[
+              IconButton(
+                icon: const Icon(Icons.remove),
+                tooltip: s.minimizeWindow,
+                onPressed: () => _invokeWindowControl('minimize'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.crop_square),
+                tooltip: s.maximizeOrRestoreWindow,
+                onPressed: () => _invokeWindowControl('maximizeOrRestore'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: s.closeWindow,
+                onPressed: () => _invokeWindowControl('close'),
+              ),
+            ],
           ],
         ),
         body: db.isOpen
