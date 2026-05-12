@@ -433,6 +433,9 @@ class HomePage extends ConsumerWidget {
     if (error is AccessModeUnavailableException) {
       return error.message;
     }
+    if (error is FileAccessFailureException) {
+      return error.summary;
+    }
     return '打开失败: $error';
   }
 

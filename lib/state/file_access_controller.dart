@@ -16,6 +16,19 @@ class AccessModeUnavailableException implements Exception {
   String toString() => message;
 }
 
+class FileAccessFailureException implements Exception {
+  final String summary;
+  final String details;
+
+  const FileAccessFailureException({
+    required this.summary,
+    required this.details,
+  });
+
+  @override
+  String toString() => details;
+}
+
 /// Manages Android file access modes, permissions, and directory browsing state.
 class FileAccessController extends ChangeNotifier {
   static const _manageAllFilesPrefKey = 'manage_all_files_enabled';
@@ -335,7 +348,12 @@ class FileAccessController extends ChangeNotifier {
         errors.every((e) => e.contains('empty result'))) {
       return emptyFallback;
     }
-    throw Exception('Failed to list directory: $path\n${errors.join('\n')}');
+    throw _buildAccessFailure(
+      operationLabel: '列出目录',
+      path: path,
+      candidates: candidates,
+      errors: errors,
+    );
   }
 
   Future<DatabaseOpenSession> openDatabaseFile(String sourcePath,
@@ -364,7 +382,12 @@ class FileAccessController extends ChangeNotifier {
         errors.add('${fileAccessModeName(mode)}: $error');
       }
     }
-    throw Exception('Failed to open database: $sourcePath\n${errors.join('\n')}');
+    throw _buildAccessFailure(
+      operationLabel: '打开数据库',
+      path: sourcePath,
+      candidates: candidates,
+      errors: errors,
+    );
   }
 
   Future<void> saveBackToSource(String workPath, String sourcePath) async {
@@ -413,6 +436,75 @@ class FileAccessController extends ChangeNotifier {
     if (!prefs.containsKey(key)) {
       await prefs.setBool(key, value);
     }
+  }
+
+  FileAccessFailureException _buildAccessFailure({
+    required String operationLabel,
+    required String path,
+    required List<FileAccessMode> candidates,
+    required List<String> errors,
+  }) {
+    final summary = _friendlyAccessFailureSummary(
+      operationLabel: operationLabel,
+      path: path,
+      candidates: candidates,
+      errors: errors,
+    );
+    final detail = StringBuffer(summary)
+      ..writeln()
+      ..writeln('Path: $path')
+      ..writeln('Tried modes: ${candidates.map(fileAccessModeName).join(' → ')}');
+    for (final error in errors) {
+      detail.writeln(error);
+    }
+    return FileAccessFailureException(
+      summary: summary,
+      details: detail.toString().trim(),
+    );
+  }
+
+  String _friendlyAccessFailureSummary({
+    required String operationLabel,
+    required String path,
+    required List<FileAccessMode> candidates,
+    required List<String> errors,
+  }) {
+    if (_isAndroidRestrictedPath(path)) {
+      final triedPrivileged =
+          candidates.contains(FileAccessMode.shizuku) ||
+          candidates.contains(FileAccessMode.root);
+      if (!triedPrivileged) {
+        return '该目录受 Android 限制，全部文件访问不足以访问，请启用 Shizuku 或 Root';
+      }
+      final privilegedFailed = errors.any((error) {
+        final lower = error.toLowerCase();
+        return (lower.contains('shizuku:') || lower.contains('root:')) &&
+            _isPermissionLikeError(lower);
+      });
+      if (privilegedFailed) {
+        return '该目录受 Android 限制，已尝试 Shizuku 或 Root，但当前仍无法访问';
+      }
+      return operationLabel == '打开数据库'
+          ? '该数据库位于 Android 受限目录，请使用 Shizuku 或 Root 访问'
+          : '该目录位于 Android 受限区域，请使用 Shizuku 或 Root 访问';
+    }
+
+    return '$operationLabel失败: $path';
+  }
+
+  bool _isAndroidRestrictedPath(String path) {
+    return path == '/storage/emulated/0/Android' ||
+        path.startsWith('/storage/emulated/0/Android/') ||
+        path == '/sdcard/Android' ||
+        path.startsWith('/sdcard/Android/');
+  }
+
+  bool _isPermissionLikeError(String value) {
+    return value.contains('permission denied') ||
+        value.contains('operation not permitted') ||
+        value.contains('errno = 13') ||
+        value.contains('pathaccessexception') ||
+        value.contains('no such file or directory');
   }
 
   int _modePrivilegeRank(FileAccessMode mode) {

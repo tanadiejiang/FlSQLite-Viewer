@@ -96,15 +96,20 @@ class FileBrowserController extends ChangeNotifier {
       }
       _addRecentPath(path);
     } catch (e) {
-      final modes = _accessController
-          .candidateModesForPath(path, forcedMode: forcedMode)
-          .map(fileAccessModeName)
-          .join(' → ');
-      final detail = '$e\nTried modes: $modes'
-          .replaceFirst('Exception: ', '')
-          .trim();
-      _errorDetails = detail;
-      _errorSummary = detail.split('\n').first.trim();
+      if (e is FileAccessFailureException) {
+        _errorSummary = e.summary;
+        _errorDetails = e.details;
+      } else {
+        final modes = _accessController
+            .candidateModesForPath(path, forcedMode: forcedMode)
+            .map(fileAccessModeName)
+            .join(' → ');
+        final detail = '$e\nTried modes: $modes'
+            .replaceFirst('Exception: ', '')
+            .trim();
+        _errorDetails = detail;
+        _errorSummary = detail.split('\n').first.trim();
+      }
     }
 
     _isLoading = false;
