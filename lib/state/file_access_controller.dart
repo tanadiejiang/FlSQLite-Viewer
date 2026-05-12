@@ -390,9 +390,13 @@ class FileAccessController extends ChangeNotifier {
     );
   }
 
-  Future<void> saveBackToSource(String workPath, String sourcePath) async {
+  Future<void> saveBackToSource(
+    String workPath,
+    String sourcePath, {
+    FileAccessMode? preferredMode,
+  }) async {
     await ensureInitialized();
-    final mode = effectiveModeForPath(sourcePath);
+    final mode = preferredMode ?? effectiveModeForPath(sourcePath);
     await _access.writeBackToSource(workPath, sourcePath, mode: mode);
   }
 

@@ -8,6 +8,7 @@ import '../features/database/presentation/data_grid.dart';
 import '../features/database/presentation/row_detail_page.dart';
 import '../features/database/presentation/row_editor_dialog.dart';
 import '../features/file_browser/presentation/file_browser_page.dart';
+import '../features/history/presentation/history_page.dart';
 import '../models/database_models.dart';
 import '../state/database_controller.dart';
 import '../state/file_access_controller.dart';
@@ -176,39 +177,38 @@ class _HomePageState extends ConsumerState<HomePage>
             if (db.historyEntries.isNotEmpty) ...[
               const SizedBox(height: 24),
               Card.outlined(
+                clipBehavior: Clip.antiAlias,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '最近打开',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => _openHistoryPage(context),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '最近打开',
+                                  style: theme.textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                size: 18,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      for (final entry in db.historyEntries)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.history),
-                          title: Text(
-                            entry.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            entry.sourcePath,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Text(
-                            _modeLabel(entry.accessMode),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          onTap: () => _openRecentDatabase(context, entry),
-                        ),
+                      for (final entry in db.historyEntries.take(4))
+                        _buildRecentHistoryTile(context, theme, entry),
                     ],
                   ),
                 ),
@@ -252,6 +252,115 @@ class _HomePageState extends ConsumerState<HomePage>
         ],
       ),
     );
+  }
+
+  Widget _buildRecentHistoryTile(
+    BuildContext context,
+    ThemeData theme,
+    DatabaseHistoryEntry entry,
+  ) {
+    return Dismissible(
+      key: ValueKey('recent-${entry.sourcePath}'),
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (_) async {
+        await _confirmDeleteHistoryEntry(context, entry);
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.error,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.error,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.history),
+        title: Text(
+          entry.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          entry.sourcePath,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: _buildHistoryMeta(
+          theme,
+          modeLabel: _modeLabel(entry.accessMode),
+          timeLabel: _formatHistoryTime(entry.lastOpenedAt),
+        ),
+        onTap: () => _openRecentDatabase(context, entry),
+        onLongPress: () => _confirmDeleteHistoryEntry(context, entry),
+      ),
+    );
+  }
+
+  Widget _buildHistoryMeta(
+    ThemeData theme, {
+    required String modeLabel,
+    required String timeLabel,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            modeLabel,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            timeLabel,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatHistoryTime(DateTime value) {
+    final now = DateTime.now();
+    final difference = now.difference(value);
+
+    if (difference.inMinutes < 1) {
+      return '刚刚';
+    }
+    if (difference.inHours < 1) {
+      return '${difference.inMinutes}分钟前';
+    }
+    if (difference.inDays < 1) {
+      return '${difference.inHours}小时前';
+    }
+    if (difference.inDays < 30) {
+      return '${difference.inDays}天前';
+    }
+    if (difference.inDays < 365) {
+      return '${(difference.inDays / 30).floor()}个月前';
+    }
+    return '${(difference.inDays / 365).floor()}年前';
   }
 
   Widget _buildDatabaseView(BuildContext context, DatabaseController db) {
@@ -573,6 +682,20 @@ class _HomePageState extends ConsumerState<HomePage>
     );
   }
 
+  Future<void> _openHistoryPage(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (pageContext) => HistoryPage(
+          onOpenEntry: (entry) async {
+            Navigator.of(pageContext).pop();
+            await _openRecentDatabase(context, entry);
+          },
+          modeLabelBuilder: _modeLabel,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openRecentDatabase(
     BuildContext context,
     DatabaseHistoryEntry entry,
@@ -600,6 +723,42 @@ class _HomePageState extends ConsumerState<HomePage>
         SnackBar(content: Text(_formatOpenFailureMessage(e))),
       );
     }
+  }
+
+  Future<void> _confirmDeleteHistoryEntry(
+    BuildContext context,
+    DatabaseHistoryEntry entry,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除最近打开记录'),
+        content: Text('确定删除 ${entry.displayName} 这条最近打开记录吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: errorColor),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final db = ref.read(databaseControllerProvider);
+    await db.removeHistoryEntry(entry.sourcePath);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text('已删除最近打开记录: ${entry.displayName}')),
+    );
   }
 
   void _openRowDetail(

@@ -346,7 +346,11 @@ class DatabaseController extends ChangeNotifier {
         _repository.service.executeRaw('PRAGMA wal_checkpoint(TRUNCATE)');
       } catch (_) {}
 
-      await access.saveBackToSource(session.workPath, session.sourcePath);
+      await access.saveBackToSource(
+        session.workPath,
+        session.sourcePath,
+        preferredMode: session.accessMode,
+      );
       _repository.refresh();
       _tableNames = _repository.getTableNames();
       _currentTable =
@@ -395,6 +399,35 @@ class DatabaseController extends ChangeNotifier {
         .map(DatabaseHistoryEntry.fromJson)
         .toList()
       ..sort((a, b) => b.lastOpenedAt.compareTo(a.lastOpenedAt));
+    notifyListeners();
+  }
+
+  Future<void> removeHistoryEntry(String sourcePath) async {
+    _historyEntries.removeWhere((entry) => entry.sourcePath == sourcePath);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _historyPreferenceKey,
+      _historyEntries.map((entry) => jsonEncode(entry.toJson())).toList(),
+    );
+    notifyListeners();
+  }
+
+  Future<void> removeHistoryEntries(List<String> sourcePaths) async {
+    if (sourcePaths.isEmpty) return;
+    final targets = sourcePaths.toSet();
+    _historyEntries.removeWhere((entry) => targets.contains(entry.sourcePath));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _historyPreferenceKey,
+      _historyEntries.map((entry) => jsonEncode(entry.toJson())).toList(),
+    );
+    notifyListeners();
+  }
+
+  Future<void> clearHistory() async {
+    _historyEntries = [];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_historyPreferenceKey);
     notifyListeners();
   }
 
