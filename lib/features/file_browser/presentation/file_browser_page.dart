@@ -29,7 +29,9 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
       await access.ensureInitialized();
       if (!mounted) return;
       final browser = ref.read(fileBrowserControllerProvider);
-      browser.navigateTo('/storage/emulated/0/');
+      final initialPath = await browser.defaultInitialPath();
+      if (!mounted) return;
+      await browser.navigateTo(initialPath);
     });
   }
 
@@ -95,49 +97,82 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
             child: PathBreadcrumbs(
               segments: browser.pathSegments,
               onSegmentTap: (path) => browser.navigateTo(path),
+              pathForIndex: browser.pathForSegmentIndex,
               compact: !isWide,
             ),
           ),
-          // Test path shortcuts
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final tp in FileBrowserController.testPaths)
-                  ActionChip(
-                    avatar: const Icon(Icons.bolt, size: 16),
-                    label: Text(tp['label']!, style: const TextStyle(fontSize: 11)),
-                    onPressed: () {
-                      final path = tp['path']!;
-                      final parent =
-                          path.substring(0, path.lastIndexOf('/'));
-                      final modeName = tp['mode'];
-                      final forcedMode = modeName != null
-                          ? fileAccessModeFromName(modeName)
-                          : null;
-                      final strictMode = forcedMode;
-                      if (strictMode == FileAccessMode.root &&
-                          !access.canUseMode(strictMode!)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(access
-                                .accessModeUnavailableMessage(strictMode)),
+          if (browser.isDesktop)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final drive in browser.desktopShortcutEntries) ...[
+                        ActionChip(
+                          avatar: const Icon(Icons.drive_file_move, size: 16),
+                          label: Text(
+                            drive.name,
+                            style: const TextStyle(fontSize: 11),
                           ),
-                        );
-                        return;
-                      }
-                      browser.navigateTo(
-                        parent,
-                        forcedMode: forcedMode,
-                      );
-                    },
-                    visualDensity: VisualDensity.compact,
+                          onPressed: () => browser.navigateTo(drive.fullPath),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                    ],
                   ),
-              ],
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final tp in FileBrowserController.testPaths) ...[
+                      ActionChip(
+                        avatar: const Icon(Icons.bolt, size: 16),
+                        label: Text(
+                          tp['label']!,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        onPressed: () {
+                          final path = tp['path']!;
+                          final parent =
+                              path.substring(0, path.lastIndexOf('/'));
+                          final modeName = tp['mode'];
+                          final forcedMode = modeName != null
+                              ? fileAccessModeFromName(modeName)
+                              : null;
+                          final strictMode = forcedMode;
+                          if (strictMode == FileAccessMode.root &&
+                              !access.canUseMode(strictMode!)) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(access
+                                    .accessModeUnavailableMessage(strictMode)),
+                              ),
+                            );
+                            return;
+                          }
+                          browser.navigateTo(
+                            parent,
+                            forcedMode: forcedMode,
+                          );
+                        },
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                  ],
+                ),
+              ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Align(

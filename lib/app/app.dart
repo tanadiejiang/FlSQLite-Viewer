@@ -7,7 +7,9 @@ import '../state/app_settings_controller.dart';
 import '../ui/home_page.dart';
 
 class FlSqliteViewerApp extends ConsumerStatefulWidget {
-  const FlSqliteViewerApp({super.key});
+  final List<String> initialOpenPaths;
+
+  const FlSqliteViewerApp({super.key, this.initialOpenPaths = const []});
 
   @override
   ConsumerState<FlSqliteViewerApp> createState() => _FlSqliteViewerAppState();
@@ -45,7 +47,7 @@ class _FlSqliteViewerAppState extends ConsumerState<FlSqliteViewerApp> {
         brightness: Brightness.dark,
       ),
       themeMode: ThemeMode.system,
-      home: const HomePage(),
+      home: HomePage(initialOpenPaths: widget.initialOpenPaths),
     );
   }
 }

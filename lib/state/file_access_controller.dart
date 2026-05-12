@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -314,6 +316,9 @@ class FileAccessController extends ChangeNotifier {
 
   List<DirectoryEntry> _withFullPaths(
       String path, List<DirectoryEntry> entries) {
+    if (Platform.isWindows) {
+      return entries;
+    }
     final separator = path.endsWith('/') ? '' : '/';
     return entries.map((e) {
       return DirectoryEntry(

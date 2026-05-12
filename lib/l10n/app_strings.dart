@@ -23,7 +23,8 @@ class AppStrings {
 
   String get appName => 'FlSQLite Viewer';
   String get settings => isZh ? '设置' : 'Settings';
-  String get recentRecordsCleared => isZh ? '已清空最近打开记录' : 'Recent records cleared';
+  String get recentRecordsCleared =>
+      isZh ? '已清空最近打开记录' : 'Recent records cleared';
   String get language => isZh ? '语言' : 'Language';
   String get chinese => isZh ? '中文' : 'Chinese';
   String get english => isZh ? '英文' : 'English';
@@ -33,14 +34,19 @@ class AppStrings {
   String get fileBrowser => isZh ? '文件浏览器' : 'File Browser';
   String get advancedAccess => isZh ? '高级访问' : 'Advanced Access';
   String get addRow => isZh ? '新增行' : 'Add Row';
-  String get homeSubtitle =>
-      isZh ? '跨平台 SQLite 数据库查看与编辑器' : 'Cross-platform SQLite database viewer and editor';
+  String get homeSubtitle => isZh
+      ? '跨平台 SQLite 数据库查看与编辑器'
+      : 'Cross-platform SQLite database viewer and editor';
   String get openDatabase => isZh ? '打开数据库' : 'Open Database';
   String get androidAdvancedAccessSettings =>
       isZh ? 'Android 高级访问设置' : 'Android Advanced Access Settings';
   String get recentOpen => isZh ? '最近打开' : 'Recent Open';
-  String get supportedAccessTypes => isZh ? '支持的访问方式' : 'Supported Access Types';
-  String get normalDirectoryAccess => isZh ? '普通目录访问' : 'Normal Directory Access';
+  String get supportedAccessTypes =>
+      isZh ? '支持的访问方式' : 'Supported Access Types';
+  String get desktopOpenHint =>
+      isZh ? '支持直接拖入或手动打开' : 'Drag files in or open manually';
+  String get normalDirectoryAccess =>
+      isZh ? '普通目录访问' : 'Normal Directory Access';
   String get allFilesAccess => isZh ? '全部文件访问' : 'All Files Access';
   String get rootMode => isZh ? 'Root 模式 (su)' : 'Root Mode (su)';
   String get shizukuAccess => isZh ? 'Shizuku 授权访问' : 'Shizuku Access';
@@ -50,6 +56,11 @@ class AppStrings {
   String get unsavedChangesTitle => isZh ? '有未保存修改' : 'Unsaved Changes';
   String get unsavedChangesContent =>
       isZh ? '是否先保存当前修改再返回？' : 'Save current changes before going back?';
+  String get saveBeforeOpenNewFileContent => isZh
+      ? '是否保存当前修改，然后打开新文件？'
+      : 'Save current changes before opening the new file?';
+  String get yes => isZh ? '是' : 'Yes';
+  String get no => isZh ? '否' : 'No';
   String get cancel => isZh ? '取消' : 'Cancel';
   String get discard => isZh ? '不保存' : 'Discard';
   String get saveAndBack => isZh ? '保存并返回' : 'Save and Back';
@@ -67,11 +78,13 @@ class AppStrings {
   String get rowUpdatedPendingSave =>
       isZh ? '已更新行，待保存到源文件' : 'Row updated, pending save to source file';
   String get confirmDelete => isZh ? '确认删除' : 'Confirm Delete';
-  String get confirmDeleteRowContent =>
-      isZh ? '确定要删除这行数据吗？此操作不可撤销。' : 'Delete this row? This action cannot be undone.';
+  String get confirmDeleteRowContent => isZh
+      ? '确定要删除这行数据吗？此操作不可撤销。'
+      : 'Delete this row? This action cannot be undone.';
   String get rowDeletedPendingSave =>
       isZh ? '已删除行，待保存到源文件' : 'Row deleted, pending save to source file';
-  String openFailed(Object error) => isZh ? '打开失败: $error' : 'Open failed: $error';
+  String openFailed(Object error) =>
+      isZh ? '打开失败: $error' : 'Open failed: $error';
   String get modeAllFiles => isZh ? '全部文件' : 'All Files';
   String get modeRoot => 'Root';
   String get modeShizuku => 'Shizuku';
@@ -83,7 +96,9 @@ class AppStrings {
       return isZh ? '刚刚' : 'Just now';
     }
     if (difference.inHours < 1) {
-      return isZh ? '${difference.inMinutes}分钟前' : '${difference.inMinutes} min ago';
+      return isZh
+          ? '${difference.inMinutes}分钟前'
+          : '${difference.inMinutes} min ago';
     }
     if (difference.inDays < 1) {
       return isZh ? '${difference.inHours}小时前' : '${difference.inHours} hr ago';
@@ -109,14 +124,14 @@ class AppStrings {
   String get clearRecentContent =>
       isZh ? '确定清空全部最近打开记录吗？' : 'Clear all recent records?';
   String get clear => isZh ? '清空' : 'Clear';
-  String deleteSelectedTitle(int count) =>
-      count == 1
-          ? (isZh ? '删除最近打开记录' : 'Delete Recent Record')
-          : (isZh ? '删除所选记录' : 'Delete Selected Records');
-  String deleteSelectedContent(int count, String name) =>
-      count == 1
-          ? (isZh ? '确定删除 $name 这条最近打开记录吗？' : 'Delete recent record "$name"?')
-          : (isZh ? '确定删除选中的 $count 条最近打开记录吗？' : 'Delete $count selected recent records?');
+  String deleteSelectedTitle(int count) => count == 1
+      ? (isZh ? '删除最近打开记录' : 'Delete Recent Record')
+      : (isZh ? '删除所选记录' : 'Delete Selected Records');
+  String deleteSelectedContent(int count, String name) => count == 1
+      ? (isZh ? '确定删除 $name 这条最近打开记录吗？' : 'Delete recent record "$name"?')
+      : (isZh
+            ? '确定删除选中的 $count 条最近打开记录吗？'
+            : 'Delete $count selected recent records?');
   String deletedRecentCount(int count) =>
       isZh ? '已删除 $count 条最近打开记录' : 'Deleted $count recent records';
 
@@ -126,7 +141,8 @@ class AppStrings {
       ? '启用高级访问模式后，您可以通过特殊的文件访问通道打开受保护或受限目录中的 SQLite 数据库文件。授权状态与是否参与访问链已分离：即使已授权，关闭开关后也不会使用该通道。'
       : 'After enabling advanced access, you can open SQLite databases in protected or restricted directories through special file access channels. Authorization state is separate from whether a channel participates in the access chain: even if authorized, a disabled channel will not be used.';
   String get shizukuAuthorized => isZh ? 'Shizuku 已授权' : 'Shizuku authorized';
-  String get shizukuUnauthorized => isZh ? 'Shizuku 未授权' : 'Shizuku not authorized';
+  String get shizukuUnauthorized =>
+      isZh ? 'Shizuku 未授权' : 'Shizuku not authorized';
   String get securityNotice => isZh ? '安全提示' : 'Security Notice';
   String get securityNoticeContent => isZh
       ? 'Root 和 Shizuku 模式具有系统级权限。\n仅在您完全了解风险的情况下启用。\n修改应用私有数据可能导致该应用工作异常或数据丢失。'
@@ -140,28 +156,37 @@ class AppStrings {
   String get accessRootDescription =>
       isZh ? '通过 su 访问受保护的路径' : 'Access protected paths through su';
   String get accessShizukuLabel => isZh ? 'Shizuku 模式' : 'Shizuku Mode';
-  String get accessShizukuDescription =>
-      isZh ? '通过 Shizuku 访问受限目录' : 'Access restricted directories through Shizuku';
+  String get accessShizukuDescription => isZh
+      ? '通过 Shizuku 访问受限目录'
+      : 'Access restricted directories through Shizuku';
   String get authorized => isZh ? '已授权' : 'Authorized';
   String get unauthorized => isZh ? '未授权' : 'Unauthorized';
   String get rootAvailable => isZh ? 'Root 可用' : 'Root available';
   String get rootUnavailable => isZh ? 'Root 不可用' : 'Root unavailable';
-  String get shizukuNotInstalled => isZh ? '未安装 Shizuku' : 'Shizuku not installed';
+  String get shizukuNotInstalled =>
+      isZh ? '未安装 Shizuku' : 'Shizuku not installed';
   String get shizukuNotRunning => isZh ? 'Shizuku 未运行' : 'Shizuku not running';
-  String get enabledInAccessChain =>
-      isZh ? '当前已启用，会参与文件访问降级链。' : 'Enabled and will participate in the access fallback chain.';
-  String get authorizedButDisabled =>
-      isZh ? '已授权，但当前不会使用此访问通道。' : 'Authorized, but this access channel is currently disabled.';
+  String get enabledInAccessChain => isZh
+      ? '当前已启用，会参与文件访问降级链。'
+      : 'Enabled and will participate in the access fallback chain.';
+  String get authorizedButDisabled => isZh
+      ? '已授权，但当前不会使用此访问通道。'
+      : 'Authorized, but this access channel is currently disabled.';
   String get enabledButUnavailable =>
       isZh ? '已开启使用，但当前状态不可用。' : 'Enabled, but currently unavailable.';
   String get currentlyDisabled => isZh ? '当前未启用。' : 'Currently disabled.';
   String get openSystemSettings => isZh ? '打开系统设置' : 'Open System Settings';
   String get checkRootStatus => isZh ? '检测 Root 状态' : 'Check Root Status';
-  String get requestShizukuPermission => isZh ? '请求 Shizuku 授权' : 'Request Shizuku Permission';
-  String get rootUnavailableOrDisabled => isZh ? 'Root 权限无/或未启用' : 'Root unavailable or disabled';
-  String get shizukuUnavailableOrDisabled => isZh ? 'Shizuku 权限无/或未启用' : 'Shizuku unavailable or disabled';
-  String get allFilesUnavailableOrDisabled => isZh ? '全部文件访问无/或未启用' : 'All Files Access unavailable or disabled';
-  String get normalAccessUnavailable => isZh ? '普通目录访问不可用' : 'Normal directory access unavailable';
+  String get requestShizukuPermission =>
+      isZh ? '请求 Shizuku 授权' : 'Request Shizuku Permission';
+  String get rootUnavailableOrDisabled =>
+      isZh ? 'Root 权限无/或未启用' : 'Root unavailable or disabled';
+  String get shizukuUnavailableOrDisabled =>
+      isZh ? 'Shizuku 权限无/或未启用' : 'Shizuku unavailable or disabled';
+  String get allFilesUnavailableOrDisabled =>
+      isZh ? '全部文件访问无/或未启用' : 'All Files Access unavailable or disabled';
+  String get normalAccessUnavailable =>
+      isZh ? '普通目录访问不可用' : 'Normal directory access unavailable';
   String get listDirectoryAction => isZh ? '列出目录' : 'List directory';
   String get openDatabaseAction => isZh ? '打开数据库' : 'Open database';
   String get restrictedDirectoryNeedPrivileged => isZh
@@ -176,21 +201,25 @@ class AppStrings {
   String get restrictedDirectoryNeedShizukuOrRoot => isZh
       ? '该目录位于 Android 受限区域，请使用 Shizuku 或 Root 访问'
       : 'This directory is in a restricted Android area. Use Shizuku or Root to access it.';
-  String actionFailed(String action, String path) => isZh ? '$action失败: $path' : '$action failed: $path';
+  String actionFailed(String action, String path) =>
+      isZh ? '$action失败: $path' : '$action failed: $path';
 
   String get rootTestPath => isZh ? 'Root 测试路径' : 'Root Test Path';
   String get shizukuTestPath => isZh ? 'Shizuku 测试路径' : 'Shizuku Test Path';
   String get backupDirectory => isZh ? '普通/备份目录' : 'Normal/Backup Directory';
 
   String get fileBrowserTitle => isZh ? '文件浏览器' : 'File Browser';
-  String get filterFilesHint => isZh ? '过滤文件/目录...' : 'Filter files/directories...';
+  String get filterFilesHint =>
+      isZh ? '过滤文件/目录...' : 'Filter files/directories...';
   String get showDatabasesOnly => isZh ? '仅显示数据库' : 'Databases only';
   String get goUp => isZh ? '上一级' : 'Up';
   String get directoryLoadFailed => isZh ? '目录加载失败' : 'Directory load failed';
   String get viewDetails => isZh ? '查看详情' : 'View details';
   String get retry => isZh ? '重试' : 'Retry';
-  String get noFilterMatches => isZh ? '当前筛选无匹配项' : 'No matches for current filter';
-  String get noDatabaseFiles => isZh ? '当前目录无数据库文件' : 'No database files in current directory';
+  String get noFilterMatches =>
+      isZh ? '当前筛选无匹配项' : 'No matches for current filter';
+  String get noDatabaseFiles =>
+      isZh ? '当前目录无数据库文件' : 'No database files in current directory';
   String get directoryEmpty => isZh ? '目录为空' : 'Directory is empty';
 
   String get databaseNotOpen => isZh ? '未打开数据库' : 'Database not open';
@@ -225,10 +254,12 @@ class AppStrings {
   String get nullLabel => 'NULL';
   String get add => isZh ? '新增' : 'Add';
 
-  String get rowNotFoundForUpdate =>
-      isZh ? '目标行不存在或已变化，未能更新' : 'Target row no longer exists or changed; update failed';
-  String get rowNotFoundForDelete =>
-      isZh ? '目标行不存在或已变化，未能删除' : 'Target row no longer exists or changed; delete failed';
+  String get rowNotFoundForUpdate => isZh
+      ? '目标行不存在或已变化，未能更新'
+      : 'Target row no longer exists or changed; update failed';
+  String get rowNotFoundForDelete => isZh
+      ? '目标行不存在或已变化，未能删除'
+      : 'Target row no longer exists or changed; delete failed';
 }
 
 extension AppStringsBuildContextX on BuildContext {

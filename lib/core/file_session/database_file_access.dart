@@ -38,11 +38,17 @@ abstract class DatabaseFileAccess {
 
 /// Normal (non-privileged) file access implementation.
 class NormalFileAccess implements DatabaseFileAccess {
+  Future<String> createWorkPathForSource(String sourcePath) async {
+    final workDir = await getWorkDir();
+    final extension = p.extension(sourcePath);
+    final baseName = p.basenameWithoutExtension(sourcePath);
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    return p.join(workDir.path, '${baseName}_$stamp$extension');
+  }
+
   @override
   Future<String> copyToWorkDir(String sourcePath) async {
-    final workDir = await getWorkDir();
-    final name = p.basename(sourcePath);
-    final workPath = p.join(workDir.path, name);
+    final workPath = await createWorkPathForSource(sourcePath);
     await File(sourcePath).copy(workPath);
     // Copy WAL/SHM if they exist
     final walPath = '$sourcePath-wal';

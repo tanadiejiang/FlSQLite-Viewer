@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="FlSQLite Viewer icon draft 09 search badge">
+  <defs>
+    <linearGradient id="bg" x1="96" y1="96" x2="928" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#42A5F5"/>
+      <stop offset="0.55" stop-color="#1976D2"/>
+      <stop offset="1" stop-color="#0D47A1"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="236" y1="210" x2="790" y2="822" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E3F2FD"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#052A58" flood-opacity="0.33"/>
+    </filter>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="236" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <rect x="236" y="210" width="552" height="604" rx="76" fill="url(#panel)"/>
+    <rect x="302" y="288" width="420" height="92" rx="32" fill="#0D47A1"/>
+    <path d="M332 456h120M492 456h198M332 548h256M624 548h66M332 640h358" stroke="#90CAF9" stroke-width="40" stroke-linecap="round"/>
+    <path d="M332 456h120M624 548h66" stroke="#1976D2" stroke-width="40" stroke-linecap="round"/>
+  </g>
+  <text x="334" y="352" font-family="Segoe UI, Arial, sans-serif" font-size="56" font-weight="900" fill="#FFFFFF">SQL</text>
+  <g transform="translate(620 598)" filter="url(#shadow)">
+    <rect x="0" y="0" width="186" height="186" rx="62" fill="#00BCD4"/>
+    <circle cx="82" cy="78" r="42" fill="none" stroke="#FFFFFF" stroke-width="24"/>
+    <path d="M116 112l44 44" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round"/>
+  </g>
+  <circle cx="284" cy="736" r="26" fill="#1976D2" opacity="0.75"/>
+  <circle cx="356" cy="736" r="26" fill="#1976D2" opacity="0.45"/>
+</svg>

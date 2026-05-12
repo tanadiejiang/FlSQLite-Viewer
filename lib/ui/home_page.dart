@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/android_access/presentation/android_access_page.dart';
@@ -16,7 +17,9 @@ import '../state/database_controller.dart';
 import '../state/file_access_controller.dart';
 
 class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key});
+  final List<String> initialOpenPaths;
+
+  const HomePage({super.key, this.initialOpenPaths = const []});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -24,6 +27,9 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage>
     with SingleTickerProviderStateMixin {
+  static const _desktopOpenChannel = MethodChannel(
+    'lingxue.flsqliteviewer/desktop_open',
+  );
   static const double _tableSelectorExpandedHeight = 44;
   static const double _tableSelectorCollapseRange = 96;
   static const double _tableSelectorRevealLeadDistance = 192;
@@ -48,23 +54,32 @@ class _HomePageState extends ConsumerState<HomePage>
       await access.ensureInitialized();
       await access.checkAllStatuses(forceRefresh: true);
       if (!mounted) return;
-    });
-    _tableSelectorSettleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    )..addListener(() {
-        final animation = _tableSelectorSettleAnimation;
-        if (animation == null || !mounted) {
-          return;
+      for (final path in widget.initialOpenPaths) {
+        final opened = await _openDatabasePath(path, showSuccess: false);
+        if (opened) {
+          break;
         }
-        setState(() {
-          _tableSelectorCollapseProgress = animation.value;
+      }
+    });
+    _desktopOpenChannel.setMethodCallHandler(_handleDesktopOpenCall);
+    _tableSelectorSettleController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 220),
+        )..addListener(() {
+          final animation = _tableSelectorSettleAnimation;
+          if (animation == null || !mounted) {
+            return;
+          }
+          setState(() {
+            _tableSelectorCollapseProgress = animation.value;
+          });
         });
-      });
   }
 
   @override
   void dispose() {
+    _desktopOpenChannel.setMethodCallHandler(null);
     _tableSelectorSettleController.dispose();
     super.dispose();
   }
@@ -97,9 +112,7 @@ class _HomePageState extends ConsumerState<HomePage>
                   tooltip: s.settings,
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SettingsPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
                     );
                   },
                 ),
@@ -156,22 +169,22 @@ class _HomePageState extends ConsumerState<HomePage>
             const SizedBox(height: 16),
             Text(
               s.appName,
-              style: theme.textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               s.homeSubtitle,
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
               icon: const Icon(Icons.folder_open),
               label: Text(s.openDatabase),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(220, 48),
-              ),
+              style: FilledButton.styleFrom(minimumSize: const Size(220, 48)),
               onPressed: () => _openFileBrowser(context),
             ),
             if (isAndroid) ...[
@@ -207,8 +220,9 @@ class _HomePageState extends ConsumerState<HomePage>
                               Expanded(
                                 child: Text(
                                   s.recentOpen,
-                                  style: theme.textTheme.titleSmall
-                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               Icon(
@@ -232,21 +246,37 @@ class _HomePageState extends ConsumerState<HomePage>
             Card.outlined(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.supportedAccessTypes,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    _featureRow(Icons.folder, s.normalDirectoryAccess),
-                    _featureRow(Icons.folder_open, s.allFilesAccess),
-                    _featureRow(Icons.terminal, s.rootMode),
-                    _featureRow(Icons.hub, s.shizukuAccess),
-                  ],
-                ),
+                child: isAndroid
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.supportedAccessTypes,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _featureRow(Icons.folder, s.normalDirectoryAccess),
+                          _featureRow(Icons.folder_open, s.allFilesAccess),
+                          _featureRow(Icons.terminal, s.rootMode),
+                          _featureRow(Icons.hub, s.shizukuAccess),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Icon(
+                            Icons.upload_file_outlined,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            s.desktopOpenHint,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
               ),
             ),
           ],
@@ -259,11 +289,7 @@ class _HomePageState extends ConsumerState<HomePage>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Text(text),
-        ],
+        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(text)],
       ),
     );
   }
@@ -375,8 +401,9 @@ class _HomePageState extends ConsumerState<HomePage>
               Expanded(
                 child: Text(
                   db.currentPath ?? '',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -387,7 +414,8 @@ class _HomePageState extends ConsumerState<HomePage>
         SizedBox(
           width: double.infinity,
           height:
-              _tableSelectorExpandedHeight * (1 - _tableSelectorCollapseProgress),
+              _tableSelectorExpandedHeight *
+              (1 - _tableSelectorCollapseProgress),
           child: ClipRect(
             child: Align(
               alignment: Alignment.topLeft,
@@ -395,8 +423,10 @@ class _HomePageState extends ConsumerState<HomePage>
               child: Opacity(
                 opacity: 1 - _tableSelectorCollapseProgress,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: SingleChildScrollView(
@@ -434,9 +464,8 @@ class _HomePageState extends ConsumerState<HomePage>
             onSaveChanges: () => _saveChanges(db),
             onVerticalScroll: _handleTableSelectorScroll,
             onVerticalScrollEnd: _handleTableSelectorScrollEnd,
-            onRefresh: () => db.refreshFromSource(
-              ref.read(fileAccessControllerProvider),
-            ),
+            onRefresh: () =>
+                db.refreshFromSource(ref.read(fileAccessControllerProvider)),
             onOpenRowDetail: (row) => _openRowDetail(context, row),
             onEditRow: (row) => _showEditDialog(context, row),
             onDeleteRow: (row) => _confirmDelete(context, row),
@@ -465,15 +494,16 @@ class _HomePageState extends ConsumerState<HomePage>
 
   void _animateTableSelectorProgressTo(double target) {
     _stopTableSelectorSettleAnimation();
-    _tableSelectorSettleAnimation = Tween<double>(
-      begin: _tableSelectorCollapseProgress,
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _tableSelectorSettleController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _tableSelectorSettleAnimation =
+        Tween<double>(
+          begin: _tableSelectorCollapseProgress,
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _tableSelectorSettleController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _tableSelectorSettleController
       ..reset()
       ..forward();
@@ -513,9 +543,11 @@ class _HomePageState extends ConsumerState<HomePage>
 
     if (offset < 0 || previousOffset < 0) {
       final topPullDistance = offset < 0 ? -offset : 0.0;
-      final startProgress = _topPullStartProgress ?? _tableSelectorCollapseProgress;
+      final startProgress =
+          _topPullStartProgress ?? _tableSelectorCollapseProgress;
       final nextProgress =
-          (startProgress - topPullDistance / _tableSelectorTopPullRevealDistance)
+          (startProgress -
+                  topPullDistance / _tableSelectorTopPullRevealDistance)
               .clamp(0.0, 1.0);
       _tableSelectorRevealAccumulator = 0;
       _lastScrollWasReveal = nextProgress < _tableSelectorCollapseProgress;
@@ -536,8 +568,10 @@ class _HomePageState extends ConsumerState<HomePage>
     var nextProgress = _tableSelectorCollapseProgress;
     if (delta > 0) {
       _tableSelectorRevealAccumulator = 0;
-      nextProgress =
-          (nextProgress + delta / _tableSelectorCollapseRange).clamp(0.0, 1.0);
+      nextProgress = (nextProgress + delta / _tableSelectorCollapseRange).clamp(
+        0.0,
+        1.0,
+      );
     } else {
       final upwardDistance = -delta;
       if (nextProgress >= 0.999 || _tableSelectorRevealAccumulator > 0) {
@@ -546,10 +580,11 @@ class _HomePageState extends ConsumerState<HomePage>
             _tableSelectorRevealLeadDistance) {
           nextProgress = 1.0;
         } else {
-          final revealProgress = ((_tableSelectorRevealAccumulator -
-                      _tableSelectorRevealLeadDistance) /
-                  _tableSelectorRevealDistance)
-              .clamp(0.0, 1.0);
+          final revealProgress =
+              ((_tableSelectorRevealAccumulator -
+                          _tableSelectorRevealLeadDistance) /
+                      _tableSelectorRevealDistance)
+                  .clamp(0.0, 1.0);
           nextProgress = 1.0 - revealProgress;
         }
       } else {
@@ -573,21 +608,18 @@ class _HomePageState extends ConsumerState<HomePage>
     }
   }
 
-  Future<void> _saveChanges(DatabaseController db) async {
+  Future<bool> _saveChanges(DatabaseController db) async {
     final messenger = ScaffoldMessenger.of(context);
     final access = ref.read(fileAccessControllerProvider);
     final s = context.strings;
     await db.saveChanges(access);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (db.errorMessage != null) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(db.errorMessage!)),
-      );
-      return;
+      messenger.showSnackBar(SnackBar(content: Text(db.errorMessage!)));
+      return false;
     }
-    messenger.showSnackBar(
-      SnackBar(content: Text(s.changesSavedToSource)),
-    );
+    messenger.showSnackBar(SnackBar(content: Text(s.changesSavedToSource)));
+    return !db.hasUnsavedChanges;
   }
 
   Future<void> _handleBackFromDatabase(
@@ -599,9 +631,7 @@ class _HomePageState extends ConsumerState<HomePage>
     if (!db.hasUnsavedChanges) {
       db.closeDatabase();
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(s.databaseClosed)),
-        );
+        messenger.showSnackBar(SnackBar(content: Text(s.databaseClosed)));
       }
       return;
     }
@@ -631,15 +661,13 @@ class _HomePageState extends ConsumerState<HomePage>
     if (!mounted) return;
 
     if (action == 'save') {
-      await _saveChanges(db);
+      final saved = await _saveChanges(db);
       if (!mounted) return;
-      if (db.errorMessage != null || db.hasUnsavedChanges) {
+      if (!saved || db.errorMessage != null || db.hasUnsavedChanges) {
         return;
       }
       db.closeDatabase();
-      messenger.showSnackBar(
-        SnackBar(content: Text(s.databaseClosed)),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(s.databaseClosed)));
     } else if (action == 'discard') {
       db.closeDatabase();
       messenger.showSnackBar(
@@ -648,33 +676,108 @@ class _HomePageState extends ConsumerState<HomePage>
     }
   }
 
-  void _openFileBrowser(BuildContext context) {
+  Future<dynamic> _handleDesktopOpenCall(MethodCall call) async {
+    if (call.method != 'openFiles') {
+      return null;
+    }
+    final paths =
+        (call.arguments as List?)
+            ?.whereType<String>()
+            .where((path) => path.trim().isNotEmpty)
+            .toList() ??
+        const <String>[];
+    for (final path in paths) {
+      final opened = await _openDatabasePath(path);
+      if (opened) {
+        break;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _confirmUnsavedBeforeOpening(DatabaseController db) async {
+    if (!db.isOpen || !db.hasUnsavedChanges) {
+      return true;
+    }
+    final s = context.strings;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(s.unsavedChangesTitle),
+        content: Text(s.saveBeforeOpenNewFileContent),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+            child: Text(s.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('discard'),
+            child: Text(s.no),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('save'),
+            child: Text(s.yes),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return false;
+    }
+    if (action == 'save') {
+      return _saveChanges(db);
+    }
+    if (action == 'discard') {
+      db.closeDatabase();
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _openDatabasePath(
+    String path, {
+    FileAccessMode? forcedMode,
+    bool showSuccess = true,
+  }) async {
+    if (!mounted) {
+      return false;
+    }
     final messenger = ScaffoldMessenger.of(context);
     final s = context.strings;
+    final access = ref.read(fileAccessControllerProvider);
+    final db = ref.read(databaseControllerProvider);
+    try {
+      final canOpen = await _confirmUnsavedBeforeOpening(db);
+      if (!canOpen || !mounted) {
+        return false;
+      }
+      final session = await access.openDatabaseFile(
+        path,
+        forcedMode: forcedMode,
+      );
+      await db.openDatabase(session);
+      if (!mounted) return true;
+      setState(_resetTableSelectorScrollState);
+      if (showSuccess) {
+        messenger.showSnackBar(SnackBar(content: Text(s.openedPath(path))));
+      }
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      messenger.showSnackBar(
+        SnackBar(content: Text(_formatOpenFailureMessage(e))),
+      );
+      return false;
+    }
+  }
+
+  void _openFileBrowser(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FileBrowserPage(
           onDatabaseSelected: (path, forcedMode) async {
             Navigator.of(context).pop();
-            final access = ref.read(fileAccessControllerProvider);
-            final db = ref.read(databaseControllerProvider);
-            try {
-              final session = await access.openDatabaseFile(
-                path,
-                forcedMode: forcedMode,
-              );
-              await db.openDatabase(session);
-              if (!mounted) return;
-              setState(_resetTableSelectorScrollState);
-              messenger.showSnackBar(
-                SnackBar(content: Text(s.openedPath(path))),
-              );
-            } catch (e) {
-              if (!mounted) return;
-              messenger.showSnackBar(
-                SnackBar(content: Text(_formatOpenFailureMessage(e))),
-              );
-            }
+            await _openDatabasePath(path, forcedMode: forcedMode);
           },
         ),
       ),
@@ -703,18 +806,25 @@ class _HomePageState extends ConsumerState<HomePage>
     final db = ref.read(databaseControllerProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final canOpen = await _confirmUnsavedBeforeOpening(db);
+      if (!canOpen || !context.mounted) {
+        return;
+      }
       await access.ensureInitialized();
       await access.checkAllStatuses(forceRefresh: true);
       final session = await access.openDatabaseFile(
         entry.sourcePath,
-        forcedMode:
-            entry.accessMode == FileAccessMode.normal ? null : entry.accessMode,
+        forcedMode: entry.accessMode == FileAccessMode.normal
+            ? null
+            : entry.accessMode,
       );
       await db.openDatabase(session, preferredTable: entry.lastTable);
       if (!context.mounted) return;
       setState(_resetTableSelectorScrollState);
       messenger.showSnackBar(
-        SnackBar(content: Text(context.strings.reopenedName(entry.displayName))),
+        SnackBar(
+          content: Text(context.strings.reopenedName(entry.displayName)),
+        ),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -761,10 +871,7 @@ class _HomePageState extends ConsumerState<HomePage>
     );
   }
 
-  void _openRowDetail(
-    BuildContext context,
-    Map<String, dynamic> row,
-  ) {
+  void _openRowDetail(BuildContext context, Map<String, dynamic> row) {
     final db = ref.read(databaseControllerProvider);
     if (db.tableSchema == null) return;
 
@@ -801,10 +908,7 @@ class _HomePageState extends ConsumerState<HomePage>
     });
   }
 
-  void _showEditDialog(
-    BuildContext context,
-    Map<String, dynamic> row,
-  ) {
+  void _showEditDialog(BuildContext context, Map<String, dynamic> row) {
     final db = ref.read(databaseControllerProvider);
     if (db.tableSchema == null) return;
 
@@ -825,10 +929,7 @@ class _HomePageState extends ConsumerState<HomePage>
     });
   }
 
-  void _confirmDelete(
-    BuildContext context,
-    Map<String, dynamic> row,
-  ) {
+  void _confirmDelete(BuildContext context, Map<String, dynamic> row) {
     final s = context.strings;
     showDialog(
       context: context,
@@ -848,9 +949,9 @@ class _HomePageState extends ConsumerState<HomePage>
               Navigator.of(ctx).pop();
               final db = ref.read(databaseControllerProvider);
               db.deleteRow(row);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(s.rowDeletedPendingSave)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(s.rowDeletedPendingSave)));
             },
             child: Text(s.delete),
           ),

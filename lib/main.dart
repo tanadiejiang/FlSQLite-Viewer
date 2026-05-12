@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 
-void main() {
+void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: FlSqliteViewerApp()));
+  runApp(ProviderScope(child: FlSqliteViewerApp(initialOpenPaths: args)));
 }

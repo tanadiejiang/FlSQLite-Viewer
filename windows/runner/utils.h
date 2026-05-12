@@ -16,4 +16,8 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string);
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();
 
+// Registers this executable as an Open With candidate for SQLite database files
+// under the current Windows user.
+void RegisterWindowsOpenWithSupport();
+
 #endif  // RUNNER_UTILS_H_

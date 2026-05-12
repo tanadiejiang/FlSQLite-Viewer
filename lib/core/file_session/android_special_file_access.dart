@@ -110,9 +110,7 @@ class AndroidSpecialFileAccess extends NormalFileAccess {
   /// Copy file via privileged access from source to work dir.
   Future<String> copyToWorkDirPrivileged(String sourcePath,
       {required FileAccessMode mode}) async {
-    final workDir = await getWorkDir();
-    final name = sourcePath.split('/').last;
-    final workPath = '${workDir.path}/$name';
+    final workPath = await createWorkPathForSource(sourcePath);
     final bytes = await readFile(sourcePath, mode: mode);
     await writeFile(workPath, bytes, mode: FileAccessMode.normal);
     // Try to copy WAL/SHM too

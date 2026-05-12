@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 class PathBreadcrumbs extends StatelessWidget {
   final List<String> segments;
   final ValueChanged<String> onSegmentTap;
+  final String Function(int index)? pathForIndex;
   final bool compact;
 
   const PathBreadcrumbs({
     super.key,
     required this.segments,
     required this.onSegmentTap,
+    this.pathForIndex,
     this.compact = false,
   });
 
@@ -47,7 +49,8 @@ class PathBreadcrumbs extends StatelessWidget {
   }
 
   Widget _buildSegmentChip(BuildContext context, int index) {
-    final path = segments.take(index + 1).join('/').replaceAll('//', '/');
+    final path = pathForIndex?.call(index) ??
+        segments.take(index + 1).join('/').replaceAll('//', '/');
     if (path.isEmpty || path == '/') {
       return ActionChip(
         label: const Text('/'),

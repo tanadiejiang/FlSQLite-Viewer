@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../l10n/app_strings.dart';
 import '../../models/database_models.dart';
@@ -122,6 +125,16 @@ class FileBrowserController extends ChangeNotifier {
 
   void goUp() {
     if (_currentPath == '/') return;
+    if (Platform.isWindows) {
+      final normalized = p.normalize(_currentPath);
+      final root = p.rootPrefix(normalized);
+      if (root.isNotEmpty && normalized == root) {
+        return;
+      }
+      final parent = p.dirname(normalized);
+      navigateTo(parent == '.' ? root : parent);
+      return;
+    }
     final parent = _currentPath.substring(0, _currentPath.lastIndexOf('/'));
     navigateTo(parent.isEmpty ? '/' : parent);
   }
@@ -155,11 +168,44 @@ class FileBrowserController extends ChangeNotifier {
   // --- Path parsing helpers ---
 
   List<String> get pathSegments {
+    if (Platform.isWindows) {
+      final normalized = p.normalize(_currentPath);
+      final root = p.rootPrefix(normalized);
+      if (root.isEmpty) {
+        return [normalized];
+      }
+      final relative = normalized.substring(root.length);
+      return [
+        root,
+        ...relative
+            .split(RegExp(r'[\\/]'))
+            .where((segment) => segment.isNotEmpty),
+      ];
+    }
     if (_currentPath == '/') return ['/'];
     return ['/', ..._currentPath.split('/').where((s) => s.isNotEmpty)];
   }
 
+  String pathForSegmentIndex(int index) {
+    if (!Platform.isWindows) {
+      final segments = pathSegments;
+      final path = segments.take(index + 1).join('/').replaceAll('//', '/');
+      return path.isEmpty ? '/' : path;
+    }
+    final segments = pathSegments;
+    if (segments.isEmpty) {
+      return _currentPath;
+    }
+    if (index <= 0) {
+      return segments.first;
+    }
+    return p.joinAll(segments.take(index + 1).toList());
+  }
+
   String buildChildPath(String segment) {
+    if (Platform.isWindows) {
+      return p.join(_currentPath, segment);
+    }
     if (_currentPath == '/') return '/$segment';
     return '$_currentPath/$segment';
   }
@@ -181,6 +227,57 @@ class FileBrowserController extends ChangeNotifier {
 
   List<DirectoryEntry> get databaseFiles =>
       files.where((f) => isDatabaseFile(f.name)).toList();
+
+  bool get isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  Future<String> defaultInitialPath() async {
+    if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      if (userProfile != null && userProfile.isNotEmpty) {
+        final documents = p.join(userProfile, 'Documents');
+        if (await Directory(documents).exists()) {
+          return documents;
+        }
+        if (await Directory(userProfile).exists()) {
+          return userProfile;
+        }
+      }
+      final drives = _availableWindowsDrives();
+      return drives.isNotEmpty ? drives.first.fullPath : 'C:\\';
+    }
+    if (Platform.isLinux || Platform.isMacOS) {
+      final home = Platform.environment['HOME'];
+      if (home != null && home.isNotEmpty) {
+        return home;
+      }
+    }
+    return '/storage/emulated/0/';
+  }
+
+  List<DirectoryEntry> get desktopShortcutEntries {
+    if (!Platform.isWindows) {
+      return const [];
+    }
+    return _availableWindowsDrives();
+  }
+
+  List<DirectoryEntry> _availableWindowsDrives() {
+    final drives = <DirectoryEntry>[];
+    for (var code = 65; code <= 90; code++) {
+      final letter = String.fromCharCode(code);
+      final root = '$letter:\\';
+      if (Directory(root).existsSync()) {
+        drives.add(
+          DirectoryEntry(
+            name: root,
+            isDirectory: true,
+            fullPath: root,
+          ),
+        );
+      }
+    }
+    return drives;
+  }
 }
 
 final fileBrowserControllerProvider =
