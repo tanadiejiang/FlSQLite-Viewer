@@ -18,6 +18,7 @@ class DatabaseController extends ChangeNotifier {
 
   DatabaseOpenSession? _currentSession;
   List<DatabaseHistoryEntry> _historyEntries = [];
+  final Map<String, int> _lastViewedPageByTable = {};
 
   DatabaseController() : _repository = SqliteRepository(SqliteDatabaseService()) {
     Future.microtask(_loadHistory);
@@ -74,9 +75,14 @@ class DatabaseController extends ChangeNotifier {
     int? preferredPage,
     String? preferredSearch,
     String? preferredOrderBy,
+    bool selectFirstTableIfUnspecified = true,
   }) async {
     try {
+      final shouldResetTableState = _currentSession?.sourcePath != session.sourcePath;
       _currentSession = session;
+      if (shouldResetTableState) {
+        _lastViewedPageByTable.clear();
+      }
       _repository.open(session.workPath);
       _tableNames = _repository.getTableNames();
       _searchTerm = preferredSearch?.trim().isEmpty == true
@@ -85,13 +91,23 @@ class DatabaseController extends ChangeNotifier {
       _orderBy = preferredOrderBy ?? _orderBy;
 
       final resolvedTable =
-          preferredTable != null && _tableNames.contains(preferredTable)
-              ? preferredTable
-              : (_tableNames.isNotEmpty ? _tableNames.first : null);
-      _currentTable = resolvedTable;
+          preferredTable != null
+              ? (_tableNames.contains(preferredTable) ? preferredTable : null)
+              : null;
+      _currentTable =
+          resolvedTable ??
+          (selectFirstTableIfUnspecified && _tableNames.isNotEmpty
+              ? _tableNames.first
+              : null);
       _tableSchema =
           _currentTable != null ? _repository.getTable(_currentTable!) : null;
-      _loadPage(page: preferredPage ?? 1);
+      if (_currentTable != null) {
+        _loadPage(
+          page: preferredPage ?? _lastViewedPageByTable[_currentTable!] ?? 1,
+        );
+      } else {
+        _currentPage = null;
+      }
       _hasUnsavedChanges = false;
       _isSaving = false;
       _errorMessage = null;
@@ -110,6 +126,7 @@ class DatabaseController extends ChangeNotifier {
     _currentTable = null;
     _tableSchema = null;
     _currentPage = null;
+    _lastViewedPageByTable.clear();
     _hasUnsavedChanges = false;
     _isSaving = false;
     _errorMessage = null;
@@ -119,11 +136,22 @@ class DatabaseController extends ChangeNotifier {
   // --- Table selection ---
 
   void selectTable(String tableName) {
-    if (_currentTable == tableName) return;
+    if (_currentTable == tableName) {
+      _rememberCurrentTablePage();
+      _currentTable = null;
+      _tableSchema = null;
+      _currentPage = null;
+      _searchTerm = null;
+      _errorMessage = null;
+      Future.microtask(() => _recordHistory(lastTable: null));
+      notifyListeners();
+      return;
+    }
+    _rememberCurrentTablePage();
     _currentTable = tableName;
     _tableSchema = _repository.getTable(tableName);
     _searchTerm = null;
-    _loadPage();
+    _loadPage(page: _lastViewedPageByTable[tableName] ?? 1);
     Future.microtask(() => _recordHistory(lastTable: tableName));
     notifyListeners();
   }
@@ -145,6 +173,7 @@ class DatabaseController extends ChangeNotifier {
         searchTerm: _searchTerm,
         orderBy: _orderBy,
       );
+      _lastViewedPageByTable[_currentTable!] = _currentPage!.currentPage;
       _errorMessage = null;
     } catch (e) {
       _errorMessage = 'Query failed: $e';
@@ -152,6 +181,13 @@ class DatabaseController extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  void _rememberCurrentTablePage() {
+    if (_currentTable == null || _currentPage == null) {
+      return;
+    }
+    _lastViewedPageByTable[_currentTable!] = _currentPage!.currentPage;
   }
 
   void goToPage(int page) {
@@ -183,13 +219,30 @@ class DatabaseController extends ChangeNotifier {
     final page = _currentPage?.currentPage ?? 1;
     _repository.refresh();
     _tableNames = _repository.getTableNames();
-    if (_currentTable != null && _tableNames.contains(_currentTable)) {
+
+    if (_currentTable == null) {
+      _tableSchema = null;
+      _currentPage = null;
+      _errorMessage = null;
+      notifyListeners();
+      return;
+    }
+
+    if (_tableNames.contains(_currentTable)) {
       _tableSchema = _repository.getTable(_currentTable!);
     } else {
       _currentTable = _tableNames.isNotEmpty ? _tableNames.first : null;
       _tableSchema =
           _currentTable != null ? _repository.getTable(_currentTable!) : null;
     }
+
+    if (_currentTable == null) {
+      _currentPage = null;
+      _errorMessage = null;
+      notifyListeners();
+      return;
+    }
+
     _loadPage(page: page);
   }
 
@@ -221,6 +274,7 @@ class DatabaseController extends ChangeNotifier {
         preferredPage: selectedPage,
         preferredSearch: selectedSearch,
         preferredOrderBy: selectedOrder,
+        selectFirstTableIfUnspecified: selectedTable != null,
       );
     } on AccessModeUnavailableException catch (e) {
       _isLoading = false;
@@ -298,12 +352,18 @@ class DatabaseController extends ChangeNotifier {
       _currentTable =
           selectedTable != null && _tableNames.contains(selectedTable)
               ? selectedTable
-              : (_tableNames.isNotEmpty ? _tableNames.first : null);
+              : (selectedTable != null && _tableNames.isNotEmpty
+                  ? _tableNames.first
+                  : null);
       _tableSchema =
           _currentTable != null ? _repository.getTable(_currentTable!) : null;
       _searchTerm = selectedSearch;
       _orderBy = selectedOrder;
-      _loadPage(page: selectedPage, silent: true);
+      if (_currentTable != null) {
+        _loadPage(page: selectedPage, silent: true);
+      } else {
+        _currentPage = null;
+      }
       _hasUnsavedChanges = false;
       _errorMessage = null;
       await _recordHistory(lastTable: _currentTable, notify: false);

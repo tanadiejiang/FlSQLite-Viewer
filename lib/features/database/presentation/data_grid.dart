@@ -97,7 +97,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 40, color: Colors.red),
+            const Icon(Icons.error_outline, size: 40, color: Colors.deepOrange),
             const SizedBox(height: 8),
             Text(
               db.errorMessage!,
@@ -136,14 +136,16 @@ class _DataGridState extends ConsumerState<DataGrid> {
             children: [
               Text(
                 '${page.offset + 1}-${(page.offset + page.rows.length).clamp(0, page.totalCount)} / ${page.totalCount} 行',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const Spacer(),
               Text(
                 '第 ${page.currentPage}/${page.totalPages} 页',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -152,8 +154,9 @@ class _DataGridState extends ConsumerState<DataGrid> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final contentWidth = _tableWidth(columns);
-              final viewportWidth =
-                  contentWidth < constraints.maxWidth ? constraints.maxWidth : contentWidth;
+              final viewportWidth = contentWidth < constraints.maxWidth
+                  ? constraints.maxWidth
+                  : contentWidth;
               return SingleChildScrollView(
                 controller: _horizontalController,
                 scrollDirection: Axis.horizontal,
@@ -179,7 +182,12 @@ class _DataGridState extends ConsumerState<DataGrid> {
                             ),
                             itemBuilder: (context, index) {
                               final row = page.rows[index];
-                              return _buildDataRow(context, theme, columns, row);
+                              return _buildDataRow(
+                                context,
+                                theme,
+                                columns,
+                                row,
+                              );
                             },
                           ),
                         ),
@@ -209,12 +217,17 @@ class _DataGridState extends ConsumerState<DataGrid> {
       if (notification.metrics.pixels >= 0 && _topOverscrollExtent != 0) {
         _topOverscrollExtent = 0;
       }
-      widget.onVerticalScroll!(notification.metrics.pixels - _topOverscrollExtent);
+      widget.onVerticalScroll!(
+        notification.metrics.pixels - _topOverscrollExtent,
+      );
     } else if (notification is OverscrollNotification) {
       if (notification.metrics.pixels <= notification.metrics.minScrollExtent &&
           notification.overscroll < 0) {
         _topOverscrollExtent =
-            (_topOverscrollExtent + (-notification.overscroll)).clamp(0.0, double.infinity);
+            (_topOverscrollExtent + (-notification.overscroll)).clamp(
+              0.0,
+              double.infinity,
+            );
         widget.onVerticalScroll!(-_topOverscrollExtent);
       }
     } else if (notification is ScrollEndNotification &&
@@ -240,6 +253,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
       child: Row(
         children: [
           FilledButton.tonalIcon(
+            style: FilledButton.styleFrom(foregroundColor: Colors.blue),
             onPressed: widget.hasUnsavedChanges && !widget.isSaving
                 ? () => widget.onSaveChanges?.call()
                 : null,
@@ -249,7 +263,11 @@ class _DataGridState extends ConsumerState<DataGrid> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.save, size: 18),
+                : const Icon(
+                    Icons.save,
+                    size: 18,
+                    color: Color.fromARGB(255, 105, 177, 236),
+                  ),
             label: Text(widget.isSaving ? '保存中' : '保存'),
           ),
           const SizedBox(width: 8),
@@ -300,7 +318,10 @@ class _DataGridState extends ConsumerState<DataGrid> {
   double _tableWidth(List<TableColumnInfo> columns) {
     return _indexColumnWidth +
         _actionColumnWidth +
-        columns.fold<double>(0, (sum, column) => sum + _columnWidthFor(column.name));
+        columns.fold<double>(
+          0,
+          (sum, column) => sum + _columnWidthFor(column.name),
+        );
   }
 
   Widget _buildHeaderRow(
@@ -494,7 +515,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
                   : () => widget.onOpenRowDetail?.call(row),
             ),
             IconButton(
-              icon: const Icon(Icons.edit, size: 18),
+              icon: const Icon(Icons.edit, size: 18, color: Colors.orange),
               onPressed: widget.onEditRow == null
                   ? null
                   : () => widget.onEditRow?.call(row),
@@ -544,8 +565,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed:
-                safePage.currentPage > 1 ? () => db.prevPage() : null,
+            onPressed: safePage.currentPage > 1 ? () => db.prevPage() : null,
             tooltip: '上一页',
           ),
           const SizedBox(width: 8),
@@ -558,8 +578,9 @@ class _DataGridState extends ConsumerState<DataGrid> {
           ),
           IconButton(
             icon: const Icon(Icons.last_page),
-            onPressed:
-                safePage.hasMore ? () => db.goToPage(safePage.totalPages) : null,
+            onPressed: safePage.hasMore
+                ? () => db.goToPage(safePage.totalPages)
+                : null,
             tooltip: '末页',
           ),
           const Spacer(),
@@ -591,16 +612,20 @@ class _DataGridState extends ConsumerState<DataGrid> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_horizontalController.hasClients) {
-        _horizontalController.jumpTo(horizontalOffset.clamp(
-          0.0,
-          _horizontalController.position.maxScrollExtent,
-        ));
+        _horizontalController.jumpTo(
+          horizontalOffset.clamp(
+            0.0,
+            _horizontalController.position.maxScrollExtent,
+          ),
+        );
       }
       if (_verticalController.hasClients) {
-        _verticalController.jumpTo(verticalOffset.clamp(
-          0.0,
-          _verticalController.position.maxScrollExtent,
-        ));
+        _verticalController.jumpTo(
+          verticalOffset.clamp(
+            0.0,
+            _verticalController.position.maxScrollExtent,
+          ),
+        );
       }
     });
 

@@ -40,6 +40,12 @@ class _HomePageState extends ConsumerState<HomePage>
   @override
   void initState() {
     super.initState();
+    Future.microtask(() async {
+      final access = ref.read(fileAccessControllerProvider);
+      await access.ensureInitialized();
+      await access.checkAllStatuses(forceRefresh: true);
+      if (!mounted) return;
+    });
     _tableSelectorSettleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -299,7 +305,10 @@ class _HomePageState extends ConsumerState<HomePage>
                               child: ChoiceChip(
                                 label: Text(table),
                                 selected: db.currentTable == table,
-                                onSelected: (_) => db.selectTable(table),
+                                onSelected: (_) {
+                                  setState(_resetTableSelectorScrollState);
+                                  db.selectTable(table);
+                                },
                                 visualDensity: VisualDensity.compact,
                               ),
                             ),
@@ -572,6 +581,8 @@ class _HomePageState extends ConsumerState<HomePage>
     final db = ref.read(databaseControllerProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      await access.ensureInitialized();
+      await access.checkAllStatuses(forceRefresh: true);
       final session = await access.openDatabaseFile(
         entry.sourcePath,
         forcedMode:
@@ -605,6 +616,9 @@ class _HomePageState extends ConsumerState<HomePage>
           row: row,
           onSave: (values) {
             db.updateRow(row, values);
+          },
+          onDelete: (targetRow) {
+            db.deleteRow(targetRow);
           },
         ),
       ),

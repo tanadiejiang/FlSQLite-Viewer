@@ -7,12 +7,14 @@ class RowDetailPage extends StatefulWidget {
   final DatabaseTable table;
   final Map<String, dynamic> row;
   final ValueChanged<Map<String, dynamic>>? onSave;
+  final ValueChanged<Map<String, dynamic>>? onDelete;
 
   const RowDetailPage({
     super.key,
     required this.table,
     required this.row,
     this.onSave,
+    this.onDelete,
   });
 
   @override
@@ -47,26 +49,7 @@ class _RowDetailPageState extends State<RowDetailPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? '编辑行' : '行详情'),
-        actions: [
-          IconButton(
-            icon: Icon(_isEditing ? Icons.visibility_outlined : Icons.edit_outlined),
-            tooltip: _isEditing ? '查看详情' : '编辑',
-            onPressed: () {
-              setState(() {
-                _isEditing = !_isEditing;
-                if (!_isEditing) {
-                  _syncControllersFromRow();
-                }
-              });
-            },
-          ),
-          if (_isEditing)
-            IconButton(
-              icon: const Icon(Icons.save_outlined),
-              tooltip: '保存',
-              onPressed: _save,
-            ),
-        ],
+        actions: _buildAppBarActions(),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -86,8 +69,88 @@ class _RowDetailPageState extends State<RowDetailPage> {
     );
   }
 
+  List<Widget> _buildAppBarActions() {
+    final deleteButton = IconButton(
+      icon: Icon(
+        Icons.delete_outline,
+        color: Theme.of(context).colorScheme.error,
+      ),
+      tooltip: '删除',
+      onPressed: widget.onDelete == null ? null : _delete,
+    );
+    final toggleButton = IconButton(
+      icon: Icon(
+        _isEditing ? Icons.visibility_outlined : Icons.edit_outlined,
+        color: _isEditing ? null : Colors.orange,
+      ),
+      tooltip: _isEditing ? '查看详情' : '编辑',
+      onPressed: () {
+        setState(() {
+          _isEditing = !_isEditing;
+          if (!_isEditing) {
+            _syncControllersFromRow();
+          }
+        });
+      },
+    );
+
+    if (_isEditing) {
+      return [
+        deleteButton,
+        const SizedBox(width: 48),
+        toggleButton,
+        IconButton(
+          icon: const Icon(
+            Icons.save_outlined,
+            color: Color.fromARGB(255, 93, 169, 231),
+          ),
+          tooltip: '保存',
+          onPressed: _save,
+        ),
+      ];
+    }
+
+    return [deleteButton, const SizedBox(width: 96), toggleButton];
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('确认删除'),
+        content: const Text('确定要删除这行数据吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    widget.onDelete?.call(_currentRow);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已删除行，待保存到源文件')));
+    Navigator.of(context).pop();
+  }
+
   Widget _buildReadonlyField(
-      BuildContext context, ThemeData theme, TableColumnInfo col) {
+    BuildContext context,
+    ThemeData theme,
+    TableColumnInfo col,
+  ) {
     final value = _currentRow[col.name];
     final display = value == null ? 'NULL' : value.toString();
 
@@ -96,12 +159,7 @@ class _RowDetailPageState extends State<RowDetailPage> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                col.name,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
+            Expanded(child: Text(col.name, style: theme.textTheme.titleMedium)),
             Text(
               col.type.isEmpty ? 'any' : col.type,
               style: theme.textTheme.labelMedium?.copyWith(
@@ -126,7 +184,10 @@ class _RowDetailPageState extends State<RowDetailPage> {
   }
 
   Widget _buildEditorField(
-      BuildContext context, ThemeData theme, TableColumnInfo col) {
+    BuildContext context,
+    ThemeData theme,
+    TableColumnInfo col,
+  ) {
     final controller = _controllers[col.name]!;
     final isNull = _nullFlags[col.name] ?? false;
 
@@ -202,8 +263,9 @@ class _RowDetailPageState extends State<RowDetailPage> {
       }
       final text = _controllers[col.name]!.text.trim();
       if (text.isEmpty && col.notNull) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('${col.name} 不能为空')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${col.name} 不能为空')));
         return;
       }
       values[col.name] = text.isEmpty ? null : text;
@@ -215,7 +277,8 @@ class _RowDetailPageState extends State<RowDetailPage> {
       _isEditing = false;
       _syncControllersFromRow();
     });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('已保存修改')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已保存修改')));
   }
 }
