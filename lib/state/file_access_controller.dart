@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/file_session/android_special_file_access.dart';
 import '../../core/file_session/database_file_access.dart';
+import '../../l10n/app_strings.dart';
 import '../../models/database_models.dart';
 
 class AccessModeUnavailableException implements Exception {
@@ -35,8 +36,18 @@ class FileAccessController extends ChangeNotifier {
   static const _rootPrefKey = 'root_mode_enabled';
   static const _shizukuPrefKey = 'shizuku_mode_enabled';
 
+  FileAccessController() {
+    _applyLocalizedCapabilities();
+  }
+
   final AndroidSpecialFileAccess _access = AndroidSpecialFileAccess();
   final NormalFileAccess _normalAccess = NormalFileAccess();
+
+  bool _allFilesAvailable = false;
+  bool _rootAvailable = false;
+  bool _shizukuInstalled = false;
+  bool _shizukuRunning = false;
+  bool _shizukuGranted = false;
 
   AndroidSpecialFileAccess get access => _access;
   NormalFileAccess get normalAccess => _normalAccess;
@@ -46,18 +57,18 @@ class FileAccessController extends ChangeNotifier {
   final Map<FileAccessMode, AccessCapability> capabilities = {
     FileAccessMode.manageAllFiles: const AccessCapability(
       mode: FileAccessMode.manageAllFiles,
-      label: '全部文件访问',
-      description: '允许访问外部存储中的任意文件',
+      label: '',
+      description: '',
     ),
     FileAccessMode.root: const AccessCapability(
       mode: FileAccessMode.root,
-      label: 'Root 模式',
-      description: '通过 su 访问受保护的路径',
+      label: '',
+      description: '',
     ),
     FileAccessMode.shizuku: const AccessCapability(
       mode: FileAccessMode.shizuku,
-      label: 'Shizuku 模式',
-      description: '通过 Shizuku 访问受限目录',
+      label: '',
+      description: '',
     ),
   };
 
@@ -78,6 +89,7 @@ class FileAccessController extends ChangeNotifier {
     capabilities[FileAccessMode.manageAllFiles] =
         capabilities[FileAccessMode.manageAllFiles]!
             .copyWith(enabled: prefs.getBool(_manageAllFilesPrefKey) ?? false);
+    _applyLocalizedCapabilities();
     notifyListeners();
   }
 
@@ -88,6 +100,7 @@ class FileAccessController extends ChangeNotifier {
     if (key != null) {
       await prefs.setBool(key, enabled);
     }
+    _applyLocalizedCapabilities();
     notifyListeners();
   }
 
@@ -101,6 +114,7 @@ class FileAccessController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
 
       final hasAllFiles = await _access.hasManageAllFilesAccess();
+      _allFilesAvailable = hasAllFiles;
       final allFilesEnabled = _storedEnabledWithFallback(
         prefs,
         _manageAllFilesPrefKey,
@@ -110,7 +124,11 @@ class FileAccessController extends ChangeNotifier {
           capabilities[FileAccessMode.manageAllFiles]!.copyWith(
         enabled: allFilesEnabled,
         available: hasAllFiles,
-        statusText: hasAllFiles ? '已授权' : '未授权',
+        label: AppStrings.current.accessManageAllFilesLabel,
+        description: AppStrings.current.accessManageAllFilesDescription,
+        statusText: hasAllFiles
+            ? AppStrings.current.authorized
+            : AppStrings.current.unauthorized,
         isChecking: false,
       );
       await _persistDefaultIfMissing(
@@ -120,6 +138,7 @@ class FileAccessController extends ChangeNotifier {
       );
 
       final hasRoot = await _access.hasRootAccess(forceRefresh: forceRefresh);
+      _rootAvailable = hasRoot;
       final rootEnabled = _storedEnabledWithFallback(
         prefs,
         _rootPrefKey,
@@ -129,7 +148,11 @@ class FileAccessController extends ChangeNotifier {
           .copyWith(
         enabled: rootEnabled,
         available: hasRoot,
-        statusText: hasRoot ? 'Root 可用' : 'Root 不可用',
+        label: AppStrings.current.accessRootLabel,
+        description: AppStrings.current.accessRootDescription,
+        statusText: hasRoot
+            ? AppStrings.current.rootAvailable
+            : AppStrings.current.rootUnavailable,
         isChecking: false,
       );
       await _persistDefaultIfMissing(prefs, _rootPrefKey, rootEnabled);
@@ -139,6 +162,9 @@ class FileAccessController extends ChangeNotifier {
       final installed = shizukuStatus['installed'] == true;
       final running = shizukuStatus['running'] == true;
       final granted = shizukuStatus['permissionGranted'] == true;
+      _shizukuInstalled = installed;
+      _shizukuRunning = running;
+      _shizukuGranted = granted;
       final shizukuEnabled = _storedEnabledWithFallback(
         prefs,
         _shizukuPrefKey,
@@ -146,18 +172,20 @@ class FileAccessController extends ChangeNotifier {
       );
       String statusText;
       if (!installed) {
-        statusText = '未安装 Shizuku';
+        statusText = AppStrings.current.shizukuNotInstalled;
       } else if (!running) {
-        statusText = 'Shizuku 未运行';
+        statusText = AppStrings.current.shizukuNotRunning;
       } else if (!granted) {
-        statusText = '未授权';
+        statusText = AppStrings.current.unauthorized;
       } else {
-        statusText = '已授权';
+        statusText = AppStrings.current.authorized;
       }
       capabilities[FileAccessMode.shizuku] =
           capabilities[FileAccessMode.shizuku]!.copyWith(
         enabled: shizukuEnabled,
         available: granted,
+        label: AppStrings.current.accessShizukuLabel,
+        description: AppStrings.current.accessShizukuDescription,
         statusText: statusText,
         isChecking: false,
       );
@@ -167,6 +195,12 @@ class FileAccessController extends ChangeNotifier {
         capabilities[mode] = capabilities[mode]!.copyWith(isChecking: false);
       }
     }
+    _applyLocalizedCapabilities();
+    notifyListeners();
+  }
+
+  Future<void> refreshLocalization() async {
+    _applyLocalizedCapabilities();
     notifyListeners();
   }
 
@@ -181,13 +215,13 @@ class FileAccessController extends ChangeNotifier {
   String accessModeUnavailableMessage(FileAccessMode mode) {
     switch (mode) {
       case FileAccessMode.root:
-        return 'Root 权限无/或未启用';
+        return AppStrings.current.rootUnavailableOrDisabled;
       case FileAccessMode.shizuku:
-        return 'Shizuku 权限无/或未启用';
+        return AppStrings.current.shizukuUnavailableOrDisabled;
       case FileAccessMode.manageAllFiles:
-        return '全部文件访问无/或未启用';
+        return AppStrings.current.allFilesUnavailableOrDisabled;
       case FileAccessMode.normal:
-        return '普通目录访问不可用';
+        return AppStrings.current.normalAccessUnavailable;
     }
   }
 
@@ -349,7 +383,7 @@ class FileAccessController extends ChangeNotifier {
       return emptyFallback;
     }
     throw _buildAccessFailure(
-      operationLabel: '列出目录',
+      operationLabel: AppStrings.current.listDirectoryAction,
       path: path,
       candidates: candidates,
       errors: errors,
@@ -383,7 +417,7 @@ class FileAccessController extends ChangeNotifier {
       }
     }
     throw _buildAccessFailure(
-      operationLabel: '打开数据库',
+      operationLabel: AppStrings.current.openDatabaseAction,
       path: sourcePath,
       candidates: candidates,
       errors: errors,
@@ -478,7 +512,7 @@ class FileAccessController extends ChangeNotifier {
           candidates.contains(FileAccessMode.shizuku) ||
           candidates.contains(FileAccessMode.root);
       if (!triedPrivileged) {
-        return '该目录受 Android 限制，全部文件访问不足以访问，请启用 Shizuku 或 Root';
+        return AppStrings.current.restrictedDirectoryNeedPrivileged;
       }
       final privilegedFailed = errors.any((error) {
         final lower = error.toLowerCase();
@@ -486,14 +520,14 @@ class FileAccessController extends ChangeNotifier {
             _isPermissionLikeError(lower);
       });
       if (privilegedFailed) {
-        return '该目录受 Android 限制，已尝试 Shizuku 或 Root，但当前仍无法访问';
+        return AppStrings.current.restrictedDirectoryStillFailed;
       }
-      return operationLabel == '打开数据库'
-          ? '该数据库位于 Android 受限目录，请使用 Shizuku 或 Root 访问'
-          : '该目录位于 Android 受限区域，请使用 Shizuku 或 Root 访问';
+      return operationLabel == AppStrings.current.openDatabaseAction
+          ? AppStrings.current.restrictedDatabaseNeedPrivileged
+          : AppStrings.current.restrictedDirectoryNeedShizukuOrRoot;
     }
 
-    return '$operationLabel失败: $path';
+    return AppStrings.current.actionFailed(operationLabel, path);
   }
 
   bool _isAndroidRestrictedPath(String path) {
@@ -509,6 +543,42 @@ class FileAccessController extends ChangeNotifier {
         value.contains('errno = 13') ||
         value.contains('pathaccessexception') ||
         value.contains('no such file or directory');
+  }
+
+  void _applyLocalizedCapabilities() {
+    capabilities[FileAccessMode.manageAllFiles] =
+        capabilities[FileAccessMode.manageAllFiles]!.copyWith(
+      label: AppStrings.current.accessManageAllFilesLabel,
+      description: AppStrings.current.accessManageAllFilesDescription,
+      statusText: _allFilesAvailable
+          ? AppStrings.current.authorized
+          : AppStrings.current.unauthorized,
+    );
+    capabilities[FileAccessMode.root] = capabilities[FileAccessMode.root]!.copyWith(
+      label: AppStrings.current.accessRootLabel,
+      description: AppStrings.current.accessRootDescription,
+      statusText: _rootAvailable
+          ? AppStrings.current.rootAvailable
+          : AppStrings.current.rootUnavailable,
+    );
+
+    String shizukuStatus;
+    if (!_shizukuInstalled) {
+      shizukuStatus = AppStrings.current.shizukuNotInstalled;
+    } else if (!_shizukuRunning) {
+      shizukuStatus = AppStrings.current.shizukuNotRunning;
+    } else if (!_shizukuGranted) {
+      shizukuStatus = AppStrings.current.unauthorized;
+    } else {
+      shizukuStatus = AppStrings.current.authorized;
+    }
+
+    capabilities[FileAccessMode.shizuku] = capabilities[FileAccessMode.shizuku]!
+        .copyWith(
+      label: AppStrings.current.accessShizukuLabel,
+      description: AppStrings.current.accessShizukuDescription,
+      statusText: shizukuStatus,
+    );
   }
 
   int _modePrivilegeRank(FileAccessMode mode) {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_strings.dart';
 import '../../models/database_models.dart';
 import 'file_access_controller.dart';
 
@@ -34,7 +35,8 @@ class FileBrowserController extends ChangeNotifier {
 
   List<DirectoryEntry> get directories =>
       entries.where((e) => e.isDirectory).toList();
-  List<DirectoryEntry> get files => entries.where((e) => !e.isDirectory).toList();
+  List<DirectoryEntry> get files =>
+      entries.where((e) => !e.isDirectory).toList();
 
   String _filter = '';
   String get filter => _filter;
@@ -57,20 +59,20 @@ class FileBrowserController extends ChangeNotifier {
 
   // --- Test path shortcuts ---
 
-  static const testPaths = <Map<String, String>>[
+  static List<Map<String, String>> get testPaths => [
     {
-      'label': 'Root 测试路径',
-      'path': '/data/user/0/com.deepseek.chat/download/download.db',
+      'label': AppStrings.current.rootTestPath,
+      'path': '/data/user/0/',
       'mode': 'root',
     },
     {
-      'label': 'Shizuku 测试路径',
-      'path': '/storage/emulated/0/Android/data/com.deepseek.chat/download.db',
+      'label': AppStrings.current.shizukuTestPath,
+      'path': '/storage/emulated/0/Android/data/',
       'mode': 'shizuku',
     },
     {
-      'label': '普通/备份目录',
-      'path': '/storage/emulated/0/1/.1临时文件/download.db',
+      'label': AppStrings.current.backupDirectory,
+      'path': '/storage/emulated/0/',
     },
   ];
 
@@ -88,8 +90,10 @@ class FileBrowserController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _allEntries = await _accessController.listDirectory(path,
-          forcedMode: forcedMode);
+      _allEntries = await _accessController.listDirectory(
+        path,
+        forcedMode: forcedMode,
+      );
       _currentPath = path;
       if (pathChanged && _filter.isNotEmpty) {
         _filter = '';
@@ -181,6 +185,6 @@ class FileBrowserController extends ChangeNotifier {
 
 final fileBrowserControllerProvider =
     ChangeNotifierProvider<FileBrowserController>((ref) {
-  final accessController = ref.watch(fileAccessControllerProvider);
-  return FileBrowserController(accessController);
-});
+      final accessController = ref.watch(fileAccessControllerProvider);
+      return FileBrowserController(accessController);
+    });

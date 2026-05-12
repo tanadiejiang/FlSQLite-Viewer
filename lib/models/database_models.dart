@@ -176,6 +176,8 @@ class AccessCapability {
   AccessCapability copyWith({
     bool? enabled,
     bool? available,
+    String? label,
+    String? description,
     String? statusText,
     bool? isChecking,
   }) =>
@@ -183,8 +185,8 @@ class AccessCapability {
         mode: mode,
         enabled: enabled ?? this.enabled,
         available: available ?? this.available,
-        label: label,
-        description: description,
+        label: label ?? this.label,
+        description: description ?? this.description,
         statusText: statusText,
         isChecking: isChecking ?? this.isChecking,
       );

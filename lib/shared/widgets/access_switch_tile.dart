@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/database_models.dart';
 
 class AccessSwitchTile extends ConsumerWidget {
@@ -19,10 +20,11 @@ class AccessSwitchTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = context.strings;
     final statusColorScheme = capability.available
         ? (background: colorScheme.primaryContainer, foreground: colorScheme.onPrimaryContainer)
         : (background: colorScheme.errorContainer, foreground: colorScheme.onErrorContainer);
-    final usageHint = _usageHint();
+    final usageHint = _usageHint(s);
 
     return Card.outlined(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -89,7 +91,7 @@ class AccessSwitchTile extends ConsumerWidget {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: onAction,
-                  child: Text(_actionLabelForMode(capability.mode)),
+                  child: Text(_actionLabelForMode(capability.mode, s)),
                 ),
               ),
             ],
@@ -99,20 +101,20 @@ class AccessSwitchTile extends ConsumerWidget {
     );
   }
 
-  String? _usageHint() {
+  String? _usageHint(AppStrings s) {
     if (capability.isChecking) {
       return null;
     }
     if (capability.available && capability.enabled) {
-      return '当前已启用，会参与文件访问降级链。';
+      return s.enabledInAccessChain;
     }
     if (capability.available && !capability.enabled) {
-      return '已授权，但当前不会使用此访问通道。';
+      return s.authorizedButDisabled;
     }
     if (!capability.available && capability.enabled) {
-      return '已开启使用，但当前状态不可用。';
+      return s.enabledButUnavailable;
     }
-    return '当前未启用。';
+    return s.currentlyDisabled;
   }
 
   IconData _iconForMode(FileAccessMode mode) {
@@ -128,14 +130,14 @@ class AccessSwitchTile extends ConsumerWidget {
     }
   }
 
-  String _actionLabelForMode(FileAccessMode mode) {
+  String _actionLabelForMode(FileAccessMode mode, AppStrings s) {
     switch (mode) {
       case FileAccessMode.manageAllFiles:
-        return '打开系统设置';
+        return s.openSystemSettings;
       case FileAccessMode.root:
-        return '检测 Root 状态';
+        return s.checkRootStatus;
       case FileAccessMode.shizuku:
-        return '请求 Shizuku 授权';
+        return s.requestShizukuPermission;
       default:
         return '';
     }

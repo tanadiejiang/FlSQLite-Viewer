@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_strings.dart';
 import '../../../models/database_models.dart';
 import '../../../state/file_access_controller.dart';
 import '../../../shared/widgets/access_switch_tile.dart';
@@ -48,10 +49,11 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
     final controller = ref.watch(fileAccessControllerProvider);
     final capabilities = controller.capabilities;
     final theme = Theme.of(context);
+    final s = context.strings;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Android 高级访问'),
+        title: Text(s.androidAdvancedAccessTitle),
       ),
       body: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -59,7 +61,7 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              '启用高级访问模式后，您可以通过特殊的文件访问通道打开受保护或受限目录中的 SQLite 数据库文件。授权状态与是否参与访问链已分离：即使已授权，关闭开关后也不会使用该通道。',
+              s.androidAdvancedAccessIntro,
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -98,7 +100,11 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
               await controller.checkAllStatuses(forceRefresh: true);
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(granted ? 'Shizuku 已授权' : 'Shizuku 未授权')),
+                SnackBar(
+                  content: Text(
+                    granted ? s.shizukuAuthorized : s.shizukuUnauthorized,
+                  ),
+                ),
               );
             },
           ),
@@ -108,13 +114,13 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('安全提示',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  s.securityNotice,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  'Root 和 Shizuku 模式具有系统级权限。\n'
-                  '仅在您完全了解风险的情况下启用。\n'
-                  '修改应用私有数据可能导致该应用工作异常或数据丢失。',
+                  s.securityNoticeContent,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -128,7 +134,7 @@ class _AndroidAccessPageState extends ConsumerState<AndroidAccessPage>
             child: OutlinedButton.icon(
               onPressed: () => controller.checkAllStatuses(forceRefresh: true),
               icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('刷新所有状态'),
+              label: Text(s.refreshAllStatuses),
             ),
           ),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_strings.dart';
 import '../../../models/database_models.dart';
 import '../../../state/database_controller.dart';
 
@@ -70,6 +71,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
   Widget build(BuildContext context) {
     final db = ref.watch(databaseControllerProvider);
     final theme = Theme.of(context);
+    final s = context.strings;
     final page = db.currentPage;
 
     final searchText = db.searchTerm ?? '';
@@ -81,11 +83,11 @@ class _DataGridState extends ConsumerState<DataGrid> {
     }
 
     if (!db.isOpen) {
-      return const Center(child: Text('未打开数据库'));
+      return Center(child: Text(s.databaseNotOpen));
     }
 
     if (db.currentTable == null) {
-      return const Center(child: Text('未选择表'));
+      return Center(child: Text(s.noTableSelected));
     }
 
     if (db.isLoading) {
@@ -107,7 +109,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () => _handleRefresh(db),
-              child: const Text('重试'),
+              child: Text(s.retry),
             ),
           ],
         ),
@@ -118,7 +120,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
       return Column(
         children: [
           _buildSearchBar(context, db),
-          const Expanded(child: Center(child: Text('无数据'))),
+          Expanded(child: Center(child: Text(s.noData))),
           _buildPaginationBar(context, db, page),
         ],
       );
@@ -135,14 +137,18 @@ class _DataGridState extends ConsumerState<DataGrid> {
           child: Row(
             children: [
               Text(
-                '${page.offset + 1}-${(page.offset + page.rows.length).clamp(0, page.totalCount)} / ${page.totalCount} 行',
+                s.rowsRange(
+                  page.offset + 1,
+                  (page.offset + page.rows.length).clamp(0, page.totalCount),
+                  page.totalCount,
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
               Text(
-                '第 ${page.currentPage}/${page.totalPages} 页',
+                s.pageIndicator(page.currentPage, page.totalPages),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -248,6 +254,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
   }
 
   Widget _buildSearchBar(BuildContext context, DatabaseController db) {
+    final s = context.strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Row(
@@ -268,14 +275,14 @@ class _DataGridState extends ConsumerState<DataGrid> {
                     size: 18,
                     color: Color.fromARGB(255, 105, 177, 236),
                   ),
-            label: Text(widget.isSaving ? '保存中' : '保存'),
+            label: Text(widget.isSaving ? s.saving : s.save),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: '搜索 ${db.currentTable}...',
+                hintText: s.searchTable(db.currentTable!),
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: db.searchTerm != null
                     ? IconButton(
@@ -330,6 +337,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
     List<TableColumnInfo> columns,
   ) {
     final color = theme.colorScheme.surfaceContainerHighest;
+    final strings = context.strings;
     return Container(
       height: _headerHeight,
       color: color,
@@ -338,7 +346,11 @@ class _DataGridState extends ConsumerState<DataGrid> {
           _buildHeaderCell('#', width: _indexColumnWidth),
           for (final col in columns)
             _buildResizableHeaderCell(context, theme, col),
-          _buildHeaderCell('操作', width: _actionColumnWidth, alignEnd: true),
+          _buildHeaderCell(
+            strings.actions,
+            width: _actionColumnWidth,
+            alignEnd: true,
+          ),
         ],
       ),
     );
@@ -506,7 +518,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
           children: [
             IconButton(
               icon: const Icon(Icons.visibility_outlined, size: 18),
-              tooltip: '详情',
+              tooltip: context.strings.details,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
@@ -519,7 +531,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
               onPressed: widget.onEditRow == null
                   ? null
                   : () => widget.onEditRow?.call(row),
-              tooltip: '编辑',
+              tooltip: context.strings.edit,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
@@ -533,7 +545,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
               onPressed: widget.onDeleteRow == null
                   ? null
                   : () => widget.onDeleteRow?.call(row),
-              tooltip: '删除',
+              tooltip: context.strings.delete,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
@@ -561,12 +573,12 @@ class _DataGridState extends ConsumerState<DataGrid> {
           IconButton(
             icon: const Icon(Icons.first_page),
             onPressed: safePage.currentPage > 1 ? () => db.goToPage(1) : null,
-            tooltip: '首页',
+            tooltip: context.strings.firstPage,
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left),
             onPressed: safePage.currentPage > 1 ? () => db.prevPage() : null,
-            tooltip: '上一页',
+            tooltip: context.strings.previousPage,
           ),
           const SizedBox(width: 8),
           Text('${safePage.currentPage} / ${safePage.totalPages}'),
@@ -574,20 +586,20 @@ class _DataGridState extends ConsumerState<DataGrid> {
           IconButton(
             icon: const Icon(Icons.chevron_right),
             onPressed: safePage.hasMore ? () => db.nextPage() : null,
-            tooltip: '下一页',
+            tooltip: context.strings.nextPage,
           ),
           IconButton(
             icon: const Icon(Icons.last_page),
             onPressed: safePage.hasMore
                 ? () => db.goToPage(safePage.totalPages)
                 : null,
-            tooltip: '末页',
+            tooltip: context.strings.lastPage,
           ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => _handleRefresh(db),
-            tooltip: '刷新',
+            tooltip: context.strings.refresh,
           ),
         ],
       ),

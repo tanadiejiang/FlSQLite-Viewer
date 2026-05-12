@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../l10n/app_strings.dart';
 import '../../../models/database_models.dart';
 
 class RowEditorDialog extends StatefulWidget {
@@ -46,9 +47,10 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isWide = MediaQuery.of(context).size.width > 600;
+    final s = context.strings;
 
     return AlertDialog(
-      title: Text(widget.isEdit ? '编辑行' : '新增行'),
+      title: Text(widget.isEdit ? s.editRow : s.addRowTitle),
       content: SizedBox(
         width: isWide ? 560 : double.maxFinite,
         child: SingleChildScrollView(
@@ -56,69 +58,72 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final col in widget.table.columns)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${col.name} (${col.type.isEmpty ? 'any' : col.type})',
-                                style: theme.textTheme.labelMedium,
-                              ),
-                            ),
-                            if (col.notNull)
-                              Text(
-                                '必填',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.error,
-                                ),
-                              ),
-                            if (!col.notNull) ...[
-                              const SizedBox(width: 12),
-                              const Text('NULL', style: TextStyle(fontSize: 11)),
-                              Switch(
-                                value: _nullFlags[col.name] ?? false,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _nullFlags[col.name] = v;
-                                    if (v) {
-                                      _controllers[col.name]!.clear();
-                                    }
-                                  });
-                                },
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _controllers[col.name],
-                          enabled: !(_nullFlags[col.name] ?? false),
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          minLines: 1,
-                          maxLines: null,
-                          inputFormatters: [
-                            LengthLimitingTextInputFormatter(200000),
-                          ],
-                          decoration: InputDecoration(
-                            hintText: _nullFlags[col.name] == true
-                                ? '(NULL)'
-                                : (col.defaultValue ?? ''),
-                            alignLabelWithHint: true,
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${col.name} (${col.type.isEmpty ? s.anyType : col.type})',
+                              style: theme.textTheme.labelMedium,
                             ),
                           ),
+                          if (col.notNull)
+                            Text(
+                              s.requiredField,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          if (!col.notNull) ...[
+                            const SizedBox(width: 12),
+                            Text(
+                              s.nullLabel,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            Switch(
+                              value: _nullFlags[col.name] ?? false,
+                              onChanged: (v) {
+                                setState(() {
+                                  _nullFlags[col.name] = v;
+                                  if (v) {
+                                    _controllers[col.name]!.clear();
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _controllers[col.name],
+                        enabled: !(_nullFlags[col.name] ?? false),
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        minLines: 1,
+                        maxLines: null,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(200000),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: _nullFlags[col.name] == true
+                              ? '(${s.nullLabel})'
+                              : (col.defaultValue ?? ''),
+                          alignLabelWithHint: true,
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
             ],
           ),
         ),
@@ -126,17 +131,18 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(s.cancel),
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(widget.isEdit ? '保存' : '新增'),
+          child: Text(widget.isEdit ? s.save : s.add),
         ),
       ],
     );
   }
 
   void _submit() {
+    final s = context.strings;
     final values = <String, dynamic>{};
     for (final col in widget.table.columns) {
       if (_nullFlags[col.name] == true) {
@@ -144,8 +150,9 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
       } else {
         final text = _controllers[col.name]!.text.trim();
         if (text.isEmpty && col.notNull) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('${col.name} 不能为空')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.fieldCannotBeEmpty(col.name))),
+          );
           return;
         }
         values[col.name] = text.isEmpty ? null : text;

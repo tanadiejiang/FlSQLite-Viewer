@@ -9,6 +9,8 @@ import '../features/database/presentation/row_detail_page.dart';
 import '../features/database/presentation/row_editor_dialog.dart';
 import '../features/file_browser/presentation/file_browser_page.dart';
 import '../features/history/presentation/history_page.dart';
+import '../features/settings/presentation/settings_page.dart';
+import '../l10n/app_strings.dart';
 import '../models/database_models.dart';
 import '../state/database_controller.dart';
 import '../state/file_access_controller.dart';
@@ -71,6 +73,7 @@ class _HomePageState extends ConsumerState<HomePage>
   Widget build(BuildContext context) {
     final db = ref.watch(databaseControllerProvider);
     final isAndroid = Platform.isAndroid;
+    final s = context.strings;
 
     return PopScope(
       canPop: !db.isOpen,
@@ -86,22 +89,32 @@ class _HomePageState extends ConsumerState<HomePage>
           leading: db.isOpen
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  tooltip: '返回',
+                  tooltip: s.back,
                   onPressed: () => _handleBackFromDatabase(context, db),
                 )
-              : null,
+              : IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  tooltip: s.settings,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                ),
           automaticallyImplyLeading: false,
-          title: db.isOpen ? null : const Text('FlSQLite Viewer'),
+          title: null,
           actions: [
             IconButton(
               icon: const Icon(Icons.folder_open),
-              tooltip: '文件浏览器',
+              tooltip: s.fileBrowser,
               onPressed: () => _openFileBrowser(context),
             ),
             if (isAndroid)
               IconButton(
                 icon: const Icon(Icons.shield_outlined),
-                tooltip: '高级访问',
+                tooltip: s.advancedAccess,
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -113,7 +126,7 @@ class _HomePageState extends ConsumerState<HomePage>
             if (db.isOpen)
               IconButton(
                 icon: const Icon(Icons.add),
-                tooltip: '新增行',
+                tooltip: s.addRow,
                 onPressed: () => _showInsertDialog(context),
               ),
           ],
@@ -131,6 +144,7 @@ class _HomePageState extends ConsumerState<HomePage>
     DatabaseController db,
   ) {
     final theme = Theme.of(context);
+    final s = context.strings;
 
     return Center(
       child: SingleChildScrollView(
@@ -141,20 +155,20 @@ class _HomePageState extends ConsumerState<HomePage>
             Icon(Icons.storage, size: 72, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(
-              'FlSQLite Viewer',
+              s.appName,
               style: theme.textTheme.headlineMedium
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              '跨平台 SQLite 数据库查看与编辑器',
+              s.homeSubtitle,
               style: theme.textTheme.bodyLarge
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
               icon: const Icon(Icons.folder_open),
-              label: const Text('打开数据库'),
+              label: Text(s.openDatabase),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(220, 48),
               ),
@@ -164,7 +178,7 @@ class _HomePageState extends ConsumerState<HomePage>
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 icon: const Icon(Icons.shield_outlined),
-                label: const Text('Android 高级访问设置'),
+                label: Text(s.androidAdvancedAccessSettings),
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -192,7 +206,7 @@ class _HomePageState extends ConsumerState<HomePage>
                             children: [
                               Expanded(
                                 child: Text(
-                                  '最近打开',
+                                  s.recentOpen,
                                   style: theme.textTheme.titleSmall
                                       ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
@@ -222,15 +236,15 @@ class _HomePageState extends ConsumerState<HomePage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '支持的访问方式',
+                      s.supportedAccessTypes,
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    _featureRow(Icons.folder, '普通目录访问'),
-                    _featureRow(Icons.folder_open, '全部文件访问'),
-                    _featureRow(Icons.terminal, 'Root 模式 (su)'),
-                    _featureRow(Icons.hub, 'Shizuku 授权访问'),
+                    _featureRow(Icons.folder, s.normalDirectoryAccess),
+                    _featureRow(Icons.folder_open, s.allFilesAccess),
+                    _featureRow(Icons.terminal, s.rootMode),
+                    _featureRow(Icons.hub, s.shizukuAccess),
                   ],
                 ),
               ),
@@ -302,7 +316,7 @@ class _HomePageState extends ConsumerState<HomePage>
         trailing: _buildHistoryMeta(
           theme,
           modeLabel: _modeLabel(entry.accessMode),
-          timeLabel: _formatHistoryTime(entry.lastOpenedAt),
+          timeLabel: _formatHistoryTime(context, entry.lastOpenedAt),
         ),
         onTap: () => _openRecentDatabase(context, entry),
         onLongPress: () => _confirmDeleteHistoryEntry(context, entry),
@@ -341,26 +355,8 @@ class _HomePageState extends ConsumerState<HomePage>
     );
   }
 
-  String _formatHistoryTime(DateTime value) {
-    final now = DateTime.now();
-    final difference = now.difference(value);
-
-    if (difference.inMinutes < 1) {
-      return '刚刚';
-    }
-    if (difference.inHours < 1) {
-      return '${difference.inMinutes}分钟前';
-    }
-    if (difference.inDays < 1) {
-      return '${difference.inHours}小时前';
-    }
-    if (difference.inDays < 30) {
-      return '${difference.inDays}天前';
-    }
-    if (difference.inDays < 365) {
-      return '${(difference.inDays / 30).floor()}个月前';
-    }
-    return '${(difference.inDays / 365).floor()}年前';
+  String _formatHistoryTime(BuildContext context, DateTime value) {
+    return context.strings.formatRelativeTime(value);
   }
 
   Widget _buildDatabaseView(BuildContext context, DatabaseController db) {
@@ -580,6 +576,7 @@ class _HomePageState extends ConsumerState<HomePage>
   Future<void> _saveChanges(DatabaseController db) async {
     final messenger = ScaffoldMessenger.of(context);
     final access = ref.read(fileAccessControllerProvider);
+    final s = context.strings;
     await db.saveChanges(access);
     if (!mounted) return;
     if (db.errorMessage != null) {
@@ -589,7 +586,7 @@ class _HomePageState extends ConsumerState<HomePage>
       return;
     }
     messenger.showSnackBar(
-      const SnackBar(content: Text('更改已保存到源文件')),
+      SnackBar(content: Text(s.changesSavedToSource)),
     );
   }
 
@@ -598,11 +595,12 @@ class _HomePageState extends ConsumerState<HomePage>
     DatabaseController db,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.strings;
     if (!db.hasUnsavedChanges) {
       db.closeDatabase();
       if (mounted) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('数据库已关闭')),
+          SnackBar(content: Text(s.databaseClosed)),
         );
       }
       return;
@@ -611,20 +609,20 @@ class _HomePageState extends ConsumerState<HomePage>
     final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('有未保存修改'),
-        content: const Text('是否先保存当前修改再返回？'),
+        title: Text(s.unsavedChangesTitle),
+        content: Text(s.unsavedChangesContent),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop('cancel'),
-            child: const Text('取消'),
+            child: Text(s.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop('discard'),
-            child: const Text('不保存'),
+            child: Text(s.discard),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop('save'),
-            child: const Text('保存并返回'),
+            child: Text(s.saveAndBack),
           ),
         ],
       ),
@@ -640,18 +638,19 @@ class _HomePageState extends ConsumerState<HomePage>
       }
       db.closeDatabase();
       messenger.showSnackBar(
-        const SnackBar(content: Text('数据库已关闭')),
+        SnackBar(content: Text(s.databaseClosed)),
       );
     } else if (action == 'discard') {
       db.closeDatabase();
       messenger.showSnackBar(
-        const SnackBar(content: Text('已放弃未保存修改')),
+        SnackBar(content: Text(s.discardedUnsavedChanges)),
       );
     }
   }
 
   void _openFileBrowser(BuildContext context) {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.strings;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FileBrowserPage(
@@ -668,7 +667,7 @@ class _HomePageState extends ConsumerState<HomePage>
               if (!mounted) return;
               setState(_resetTableSelectorScrollState);
               messenger.showSnackBar(
-                SnackBar(content: Text('已打开: $path')),
+                SnackBar(content: Text(s.openedPath(path))),
               );
             } catch (e) {
               if (!mounted) return;
@@ -712,13 +711,13 @@ class _HomePageState extends ConsumerState<HomePage>
             entry.accessMode == FileAccessMode.normal ? null : entry.accessMode,
       );
       await db.openDatabase(session, preferredTable: entry.lastTable);
-      if (!mounted) return;
+      if (!context.mounted) return;
       setState(_resetTableSelectorScrollState);
       messenger.showSnackBar(
-        SnackBar(content: Text('已重新打开: ${entry.displayName}')),
+        SnackBar(content: Text(context.strings.reopenedName(entry.displayName))),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(_formatOpenFailureMessage(e))),
       );
@@ -731,20 +730,21 @@ class _HomePageState extends ConsumerState<HomePage>
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final errorColor = Theme.of(context).colorScheme.error;
+    final s = context.strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('删除最近打开记录'),
-        content: Text('确定删除 ${entry.displayName} 这条最近打开记录吗？'),
+        title: Text(s.recentDeleteTitle),
+        content: Text(s.deleteRecentContent(entry.displayName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            child: Text(s.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: errorColor),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
+            child: Text(s.delete),
           ),
         ],
       ),
@@ -757,7 +757,7 @@ class _HomePageState extends ConsumerState<HomePage>
     await db.removeHistoryEntry(entry.sourcePath);
     if (!mounted) return;
     messenger.showSnackBar(
-      SnackBar(content: Text('已删除最近打开记录: ${entry.displayName}')),
+      SnackBar(content: Text(s.deletedRecent(entry.displayName))),
     );
   }
 
@@ -794,8 +794,9 @@ class _HomePageState extends ConsumerState<HomePage>
     ).then((values) {
       if (values is Map<String, dynamic> && context.mounted) {
         db.insertRow(values);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已新增行，待保存到源文件')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.strings.rowAddedPendingSave)),
+        );
       }
     });
   }
@@ -817,8 +818,9 @@ class _HomePageState extends ConsumerState<HomePage>
     ).then((values) {
       if (values is Map<String, dynamic> && context.mounted) {
         db.updateRow(row, values);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已更新行，待保存到源文件')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.strings.rowUpdatedPendingSave)),
+        );
       }
     });
   }
@@ -827,15 +829,16 @@ class _HomePageState extends ConsumerState<HomePage>
     BuildContext context,
     Map<String, dynamic> row,
   ) {
+    final s = context.strings;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: const Text('确定要删除这行数据吗？此操作不可撤销。'),
+        title: Text(s.confirmDelete),
+        content: Text(s.confirmDeleteRowContent),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+            child: Text(s.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -846,10 +849,10 @@ class _HomePageState extends ConsumerState<HomePage>
               final db = ref.read(databaseControllerProvider);
               db.deleteRow(row);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已删除行，待保存到源文件')),
+                SnackBar(content: Text(s.rowDeletedPendingSave)),
               );
             },
-            child: const Text('删除'),
+            child: Text(s.delete),
           ),
         ],
       ),
@@ -863,19 +866,20 @@ class _HomePageState extends ConsumerState<HomePage>
     if (error is FileAccessFailureException) {
       return error.summary;
     }
-    return '打开失败: $error';
+    return context.strings.openFailed(error);
   }
 
   String _modeLabel(FileAccessMode mode) {
+    final s = context.strings;
     switch (mode) {
       case FileAccessMode.manageAllFiles:
-        return '全部文件';
+        return s.modeAllFiles;
       case FileAccessMode.root:
-        return 'Root';
+        return s.modeRoot;
       case FileAccessMode.shizuku:
-        return 'Shizuku';
+        return s.modeShizuku;
       case FileAccessMode.normal:
-        return '普通';
+        return s.modeNormal;
     }
   }
 }

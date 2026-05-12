@@ -1,3 +1,4 @@
+import '../../l10n/app_strings.dart';
 import '../../models/database_models.dart';
 import 'sqlite_database_service.dart';
 
@@ -90,7 +91,7 @@ class SqliteRepository {
 
     final affected = _service.update(tableName, locator, changed);
     if (affected == 0) {
-      throw StateError('目标行不存在或已变化，未能更新');
+      throw StateError(AppStrings.current.rowNotFoundForUpdate);
     }
   }
 
@@ -98,7 +99,7 @@ class SqliteRepository {
     final locator = _locateRow(tableName, row);
     final affected = _service.delete(tableName, locator);
     if (affected == 0) {
-      throw StateError('目标行不存在或已变化，未能删除');
+      throw StateError(AppStrings.current.rowNotFoundForDelete);
     }
   }
 

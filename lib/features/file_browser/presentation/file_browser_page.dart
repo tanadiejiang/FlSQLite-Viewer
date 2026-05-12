@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_strings.dart';
 import '../../../state/file_browser_controller.dart';
 import '../../../state/file_access_controller.dart';
 import '../../../models/database_models.dart';
@@ -42,6 +43,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
   Widget build(BuildContext context) {
     final browser = ref.watch(fileBrowserControllerProvider);
     final access = ref.read(fileAccessControllerProvider);
+    final s = context.strings;
     if (_filterController.text != browser.filter) {
       _filterController.value = TextEditingValue(
         text: browser.filter,
@@ -53,7 +55,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('文件浏览器'),
+        title: Text(s.fileBrowserTitle),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(52),
           child: Padding(
@@ -61,7 +63,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
             child: TextField(
               controller: _filterController,
               decoration: InputDecoration(
-                hintText: '过滤文件/目录...',
+                hintText: s.filterFilesHint,
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _filterController.text.isNotEmpty
                     ? IconButton(
@@ -143,7 +145,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
               child: FilterChip(
                 selected: browser.showDatabasesOnly,
                 onSelected: browser.setShowDatabasesOnly,
-                label: const Text('仅显示数据库'),
+                label: Text(s.showDatabasesOnly),
                 avatar: const Icon(Icons.storage, size: 16),
                 visualDensity: VisualDensity.compact,
               ),
@@ -154,7 +156,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
           if (browser.currentPath != '/')
             ListTile(
               leading: const Icon(Icons.arrow_upward),
-              title: const Text('上一级'),
+              title: Text(s.goUp),
               dense: true,
               onTap: () => browser.goUp(),
             ),
@@ -181,7 +183,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
-                                      browser.errorSummary ?? '目录加载失败',
+                                      browser.errorSummary ?? s.directoryLoadFailed,
                                       style: theme.textTheme.titleMedium,
                                     ),
                                     if (browser.errorDetails != null &&
@@ -191,7 +193,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                       ExpansionTile(
                                         tilePadding: EdgeInsets.zero,
                                         childrenPadding: EdgeInsets.zero,
-                                        title: const Text('查看详情'),
+                                        title: Text(s.viewDetails),
                                         children: [
                                           Container(
                                             width: double.infinity,
@@ -215,7 +217,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                                       alignment: Alignment.center,
                                       child: ElevatedButton(
                                         onPressed: () => browser.retry(),
-                                        child: const Text('重试'),
+                                        child: Text(s.retry),
                                       ),
                                     ),
                                   ],
@@ -229,10 +231,10 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
                         ? Center(
                             child: Text(
                               browser.filter.isNotEmpty
-                                  ? '当前筛选无匹配项'
+                                  ? s.noFilterMatches
                                   : browser.showDatabasesOnly
-                                      ? '当前目录无数据库文件'
-                                      : '目录为空',
+                                      ? s.noDatabaseFiles
+                                      : s.directoryEmpty,
                             ),
                           )
                         : ListView.builder(

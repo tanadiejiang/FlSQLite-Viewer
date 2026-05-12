@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_strings.dart';
 import '../../../models/database_models.dart';
 import '../../../state/database_controller.dart';
 
@@ -27,27 +28,28 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   Widget build(BuildContext context) {
     final db = ref.watch(databaseControllerProvider);
     final theme = Theme.of(context);
+    final s = context.strings;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isSelectionMode ? '已选择 ${_selectedSourcePaths.length} 项' : '最近打开'),
+        title: Text(
+          _isSelectionMode
+              ? s.selectedCount(_selectedSourcePaths.length)
+              : s.recentOpen,
+        ),
         actions: [
           IconButton(
             icon: Icon(_isSelectionMode ? Icons.close : Icons.select_all),
-            tooltip: _isSelectionMode ? '退出多选' : '多选',
+            tooltip: _isSelectionMode ? s.exitSelection : s.multiSelect,
             onPressed: () {
-              setState(() {
-                if (_isSelectionMode) {
-                  _selectedSourcePaths.clear();
-                } else {
-                  _selectedSourcePaths.clear();
-                }
-              });
+              setState(_selectedSourcePaths.clear);
             },
           ),
           IconButton(
-            icon: Icon(_isSelectionMode ? Icons.delete_outline : Icons.clear_all),
-            tooltip: _isSelectionMode ? '删除所选' : '清空记录',
+            icon: Icon(
+              _isSelectionMode ? Icons.delete_outline : Icons.clear_all,
+            ),
+            tooltip: _isSelectionMode ? s.deleteSelected : s.clearRecords,
             onPressed: db.historyEntries.isEmpty
                 ? null
                 : () => _isSelectionMode
@@ -57,7 +59,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         ],
       ),
       body: db.historyEntries.isEmpty
-          ? const Center(child: Text('暂无最近打开记录'))
+          ? Center(child: Text(s.noRecentRecords))
           : ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: db.historyEntries.length,
@@ -106,7 +108,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           ),
           trailing: _HistoryMeta(
             modeLabel: widget.modeLabelBuilder(entry.accessMode),
-            timeLabel: _formatLastOpenedTime(entry.lastOpenedAt),
+            timeLabel: context.strings.formatRelativeTime(entry.lastOpenedAt),
             textTheme: theme.textTheme,
             colorScheme: theme.colorScheme,
           ),
@@ -154,10 +156,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   Future<void> _clearAllHistory() async {
+    final s = context.strings;
     final confirmed = await _confirmAction(
-      title: '清空最近打开',
-      content: '确定清空全部最近打开记录吗？',
-      actionText: '清空',
+      title: s.clearRecentTitle,
+      content: s.clearRecentContent,
+      actionText: s.clear,
     );
     if (confirmed != true || !mounted) {
       return;
@@ -166,7 +169,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     await ref.read(databaseControllerProvider).clearHistory();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清空最近打开记录')),
+      SnackBar(content: Text(s.recentRecordsCleared)),
     );
   }
 
@@ -186,12 +189,14 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       return;
     }
 
+    final s = context.strings;
     final confirmed = await _confirmAction(
-      title: entries.length == 1 ? '删除最近打开记录' : '删除所选记录',
-      content: entries.length == 1
-          ? '确定删除 ${entries.first.displayName} 这条最近打开记录吗？'
-          : '确定删除选中的 ${entries.length} 条最近打开记录吗？',
-      actionText: '删除',
+      title: s.deleteSelectedTitle(entries.length),
+      content: s.deleteSelectedContent(
+        entries.length,
+        entries.first.displayName,
+      ),
+      actionText: s.delete,
     );
     if (confirmed != true || !mounted) {
       return;
@@ -208,7 +213,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       );
     });
     messenger.showSnackBar(
-      SnackBar(content: Text('已删除 ${entries.length} 条最近打开记录')),
+      SnackBar(content: Text(s.deletedRecentCount(entries.length))),
     );
   }
 
@@ -217,6 +222,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     required String content,
     required String actionText,
   }) {
+    final s = context.strings;
     final errorColor = Theme.of(context).colorScheme.error;
     return showDialog<bool>(
       context: context,
@@ -226,7 +232,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            child: Text(s.cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: errorColor),
@@ -236,28 +242,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         ],
       ),
     );
-  }
-
-  String _formatLastOpenedTime(DateTime value) {
-    final now = DateTime.now();
-    final difference = now.difference(value);
-
-    if (difference.inMinutes < 1) {
-      return '刚刚';
-    }
-    if (difference.inHours < 1) {
-      return '${difference.inMinutes}分钟前';
-    }
-    if (difference.inDays < 1) {
-      return '${difference.inHours}小时前';
-    }
-    if (difference.inDays < 30) {
-      return '${difference.inDays}天前';
-    }
-    if (difference.inDays < 365) {
-      return '${(difference.inDays / 30).floor()}个月前';
-    }
-    return '${(difference.inDays / 365).floor()}年前';
   }
 }
 
