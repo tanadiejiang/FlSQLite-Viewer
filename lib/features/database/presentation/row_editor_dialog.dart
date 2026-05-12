@@ -56,7 +56,6 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final col in widget.table.columns)
-                if (!col.primaryKey || widget.isEdit)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Column(
@@ -140,12 +139,6 @@ class _RowEditorDialogState extends State<RowEditorDialog> {
   void _submit() {
     final values = <String, dynamic>{};
     for (final col in widget.table.columns) {
-      if (col.primaryKey && widget.isEdit) {
-        continue;
-      }
-      if (col.primaryKey && !widget.isEdit) {
-        continue;
-      }
       if (_nullFlags[col.name] == true) {
         values[col.name] = null;
       } else {

@@ -53,24 +53,33 @@ class SqliteRepository {
     return _service.insert(tableName, values);
   }
 
-  /// Determine the best column and value for locating a row.
-  /// Prefer primary keys, then rowid.
-  ({String col, dynamic val}) _locateRow(
-      String tableName, Map<String, dynamic> row) {
+  /// Determine the best predicate set for locating a row.
+  /// Prefer rowid from the current query result, then the full primary key set.
+  Map<String, dynamic> _locateRow(
+    String tableName,
+    Map<String, dynamic> row,
+  ) {
+    if (row.containsKey('rowid')) {
+      return {'rowid': row['rowid']};
+    }
+
     final columns = _service.getTableColumns(tableName);
     final pks = columns.where((c) => c.primaryKey).toList();
     if (pks.isNotEmpty) {
-      final pk = pks.first;
-      return (col: pk.name, val: row[pk.name]);
+      return {
+        for (final pk in pks) pk.name: row[pk.name],
+      };
     }
-    // Fallback to rowid
-    return (col: 'rowid', val: row['rowid']);
+
+    throw StateError('Row locator unavailable for table $tableName');
   }
 
   void updateRow(
-      String tableName, Map<String, dynamic> oldRow, Map<String, dynamic> newValues) {
-    final loc = _locateRow(tableName, oldRow);
-    // Only update changed columns
+    String tableName,
+    Map<String, dynamic> oldRow,
+    Map<String, dynamic> newValues,
+  ) {
+    final locator = _locateRow(tableName, oldRow);
     final changed = <String, dynamic>{};
     for (final entry in newValues.entries) {
       if (entry.value != oldRow[entry.key]) {
@@ -78,12 +87,19 @@ class SqliteRepository {
       }
     }
     if (changed.isEmpty) return;
-    _service.update(tableName, loc.col, loc.val, changed);
+
+    final affected = _service.update(tableName, locator, changed);
+    if (affected == 0) {
+      throw StateError('目标行不存在或已变化，未能更新');
+    }
   }
 
   void deleteRow(String tableName, Map<String, dynamic> row) {
-    final loc = _locateRow(tableName, row);
-    _service.delete(tableName, loc.col, loc.val);
+    final locator = _locateRow(tableName, row);
+    final affected = _service.delete(tableName, locator);
+    if (affected == 0) {
+      throw StateError('目标行不存在或已变化，未能删除');
+    }
   }
 
   // --- Lifecycle ---

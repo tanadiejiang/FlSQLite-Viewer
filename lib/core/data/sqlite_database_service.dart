@@ -106,19 +106,38 @@ class SqliteDatabaseService {
     return db.lastInsertRowId;
   }
 
-  /// Update a row identified by [whereCol] = [whereVal].
-  void update(String tableName, String whereCol, dynamic whereVal,
-      Map<String, dynamic> values) {
-    final sets =
-        values.keys.map((k) => '$k = ?').join(', ');
-    final sql = 'UPDATE $tableName SET $sets WHERE $whereCol = ?';
-    final params = [...values.values, whereVal];
+  /// Update rows matched by [whereValues]. Returns affected row count.
+  int update(
+    String tableName,
+    Map<String, dynamic> whereValues,
+    Map<String, dynamic> values,
+  ) {
+    final sets = values.keys.map((k) => '$k = ?').join(', ');
+    final whereClause = whereValues.keys
+        .map((k) => whereValues[k] == null ? '$k IS NULL' : '$k = ?')
+        .join(' AND ');
+    final params = <dynamic>[
+      ...values.values,
+      ...whereValues.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => entry.value),
+    ];
+    final sql = 'UPDATE $tableName SET $sets WHERE $whereClause';
     db.execute(sql, params);
+    return db.updatedRows;
   }
 
-  /// Delete a row identified by [whereCol] = [whereVal].
-  void delete(String tableName, String whereCol, dynamic whereVal) {
-    db.execute('DELETE FROM $tableName WHERE $whereCol = ?', [whereVal]);
+  /// Delete rows matched by [whereValues]. Returns affected row count.
+  int delete(String tableName, Map<String, dynamic> whereValues) {
+    final whereClause = whereValues.keys
+        .map((k) => whereValues[k] == null ? '$k IS NULL' : '$k = ?')
+        .join(' AND ');
+    final params = whereValues.entries
+        .where((entry) => entry.value != null)
+        .map((entry) => entry.value)
+        .toList();
+    db.execute('DELETE FROM $tableName WHERE $whereClause', params);
+    return db.updatedRows;
   }
 
   /// Execute a raw SQL statement (for admin use).

@@ -57,6 +57,12 @@ class DatabaseController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _hasUnsavedChanges = false;
+  bool get hasUnsavedChanges => _hasUnsavedChanges;
+
+  bool _isSaving = false;
+  bool get isSaving => _isSaving;
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
@@ -86,6 +92,8 @@ class DatabaseController extends ChangeNotifier {
       _tableSchema =
           _currentTable != null ? _repository.getTable(_currentTable!) : null;
       _loadPage(page: preferredPage ?? 1);
+      _hasUnsavedChanges = false;
+      _isSaving = false;
       _errorMessage = null;
       await _recordHistory(lastTable: _currentTable);
       notifyListeners();
@@ -102,6 +110,8 @@ class DatabaseController extends ChangeNotifier {
     _currentTable = null;
     _tableSchema = null;
     _currentPage = null;
+    _hasUnsavedChanges = false;
+    _isSaving = false;
     _errorMessage = null;
     notifyListeners();
   }
@@ -120,10 +130,12 @@ class DatabaseController extends ChangeNotifier {
 
   // --- Query ---
 
-  void _loadPage({int? page}) {
+  void _loadPage({int? page, bool silent = false}) {
     if (_currentTable == null) return;
-    _isLoading = true;
-    notifyListeners();
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       _currentPage = _repository.queryPage(
@@ -227,6 +239,7 @@ class DatabaseController extends ChangeNotifier {
     if (_currentTable == null) return;
     try {
       _repository.insertRow(_currentTable!, values);
+      _hasUnsavedChanges = true;
       _loadPage(page: _currentPage?.currentPage ?? 1);
     } catch (e) {
       _errorMessage = 'Insert failed: $e';
@@ -238,6 +251,7 @@ class DatabaseController extends ChangeNotifier {
     if (_currentTable == null) return;
     try {
       _repository.updateRow(_currentTable!, oldRow, newValues);
+      _hasUnsavedChanges = true;
       refresh();
     } catch (e) {
       _errorMessage = 'Update failed: $e';
@@ -249,11 +263,63 @@ class DatabaseController extends ChangeNotifier {
     if (_currentTable == null) return;
     try {
       _repository.deleteRow(_currentTable!, row);
+      _hasUnsavedChanges = true;
       _loadPage(page: _currentPage?.currentPage ?? 1);
     } catch (e) {
       _errorMessage = 'Delete failed: $e';
       notifyListeners();
     }
+  }
+
+  Future<void> saveChanges(FileAccessController access) async {
+    final session = _currentSession;
+    if (session == null || !_hasUnsavedChanges || _isSaving) {
+      return;
+    }
+
+    final selectedTable = _currentTable;
+    final selectedPage = _currentPage?.currentPage ?? 1;
+    final selectedSearch = _searchTerm;
+    final selectedOrder = _orderBy;
+
+    _isSaving = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      try {
+        _repository.service.executeRaw('PRAGMA wal_checkpoint(FULL)');
+        _repository.service.executeRaw('PRAGMA wal_checkpoint(TRUNCATE)');
+      } catch (_) {}
+
+      await access.saveBackToSource(session.workPath, session.sourcePath);
+      _repository.refresh();
+      _tableNames = _repository.getTableNames();
+      _currentTable =
+          selectedTable != null && _tableNames.contains(selectedTable)
+              ? selectedTable
+              : (_tableNames.isNotEmpty ? _tableNames.first : null);
+      _tableSchema =
+          _currentTable != null ? _repository.getTable(_currentTable!) : null;
+      _searchTerm = selectedSearch;
+      _orderBy = selectedOrder;
+      _loadPage(page: selectedPage, silent: true);
+      _hasUnsavedChanges = false;
+      _errorMessage = null;
+      await _recordHistory(lastTable: _currentTable, notify: false);
+    } catch (e) {
+      _errorMessage = 'Save failed: $e';
+      try {
+        _repository.refresh();
+        if (_currentTable != null) {
+          _tableSchema = _repository.getTable(_currentTable!);
+        }
+        _loadPage(page: selectedPage, silent: true);
+      } catch (_) {}
+    }
+
+    _isSaving = false;
+    notifyListeners();
   }
 
   void clearError() {
@@ -272,7 +338,7 @@ class DatabaseController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _recordHistory({String? lastTable}) async {
+  Future<void> _recordHistory({String? lastTable, bool notify = true}) async {
     final session = _currentSession;
     if (session == null) return;
 
@@ -296,7 +362,9 @@ class DatabaseController extends ChangeNotifier {
       _historyPreferenceKey,
       _historyEntries.map((entry) => jsonEncode(entry.toJson())).toList(),
     );
-    notifyListeners();
+    if (notify) {
+      notifyListeners();
+    }
   }
 }
 

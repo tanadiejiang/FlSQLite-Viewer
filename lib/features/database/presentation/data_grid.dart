@@ -6,6 +6,11 @@ import '../../../state/database_controller.dart';
 
 class DataGrid extends ConsumerStatefulWidget {
   final Future<void> Function()? onRefresh;
+  final Future<void> Function()? onSaveChanges;
+  final bool hasUnsavedChanges;
+  final bool isSaving;
+  final ValueChanged<double>? onVerticalScroll;
+  final VoidCallback? onVerticalScrollEnd;
   final ValueChanged<Map<String, dynamic>>? onOpenRowDetail;
   final ValueChanged<Map<String, dynamic>>? onEditRow;
   final ValueChanged<Map<String, dynamic>>? onDeleteRow;
@@ -13,6 +18,11 @@ class DataGrid extends ConsumerStatefulWidget {
   const DataGrid({
     super.key,
     this.onRefresh,
+    this.onSaveChanges,
+    this.hasUnsavedChanges = false,
+    this.isSaving = false,
+    this.onVerticalScroll,
+    this.onVerticalScrollEnd,
     this.onOpenRowDetail,
     this.onEditRow,
     this.onDeleteRow,
@@ -35,13 +45,21 @@ class _DataGridState extends ConsumerState<DataGrid> {
   final _verticalController = ScrollController();
   final _horizontalController = ScrollController();
   final Map<String, double> _columnWidths = {};
+  double _topOverscrollExtent = 0;
 
   String? _resizingColumn;
   double _resizeStartDx = 0;
   double _resizeStartWidth = _dataColumnWidth;
 
   @override
+  void initState() {
+    super.initState();
+    _verticalController.addListener(_handleVerticalScroll);
+  }
+
+  @override
   void dispose() {
+    _verticalController.removeListener(_handleVerticalScroll);
     _searchController.dispose();
     _verticalController.dispose();
     _horizontalController.dispose();
@@ -99,29 +117,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
     if (page == null || page.rows.isEmpty) {
       return Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '搜索 ${db.currentTable}...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: db.searchTerm != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () => db.setSearch(null),
-                      )
-                    : null,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              onChanged: (v) => db.setSearch(v),
-            ),
-          ),
+          _buildSearchBar(context, db),
           const Expanded(child: Center(child: Text('无数据'))),
           _buildPaginationBar(context, db, page),
         ],
@@ -133,32 +129,7 @@ class _DataGridState extends ConsumerState<DataGrid> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: '搜索 ${db.currentTable}...',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: db.searchTerm != null
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        db.setSearch(null);
-                      },
-                    )
-                  : null,
-              filled: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: (v) => db.setSearch(v),
-          ),
-        ),
+        _buildSearchBar(context, db),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
@@ -194,20 +165,23 @@ class _DataGridState extends ConsumerState<DataGrid> {
                       _buildHeaderRow(context, theme, columns),
                       const Divider(height: 1),
                       Expanded(
-                        child: ListView.separated(
-                          controller: _verticalController,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          itemCount: page.rows.length,
-                          separatorBuilder: (_, separatorIndex) => Divider(
-                            height: 1,
-                            thickness: 0.6,
-                            color: theme.dividerColor.withValues(alpha: 0.4),
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _handleScrollNotification,
+                          child: ListView.separated(
+                            controller: _verticalController,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            itemCount: page.rows.length,
+                            separatorBuilder: (_, separatorIndex) => Divider(
+                              height: 1,
+                              thickness: 0.6,
+                              color: theme.dividerColor.withValues(alpha: 0.4),
+                            ),
+                            itemBuilder: (context, index) {
+                              final row = page.rows[index];
+                              return _buildDataRow(context, theme, columns, row);
+                            },
                           ),
-                          itemBuilder: (context, index) {
-                            final row = page.rows[index];
-                            return _buildDataRow(context, theme, columns, row);
-                          },
                         ),
                       ),
                     ],
@@ -219,6 +193,93 @@ class _DataGridState extends ConsumerState<DataGrid> {
         ),
         _buildPaginationBar(context, db, page),
       ],
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (widget.onVerticalScroll == null) {
+      return false;
+    }
+
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    if (notification is ScrollUpdateNotification) {
+      if (notification.metrics.pixels >= 0 && _topOverscrollExtent != 0) {
+        _topOverscrollExtent = 0;
+      }
+      widget.onVerticalScroll!(notification.metrics.pixels - _topOverscrollExtent);
+    } else if (notification is OverscrollNotification) {
+      if (notification.metrics.pixels <= notification.metrics.minScrollExtent &&
+          notification.overscroll < 0) {
+        _topOverscrollExtent =
+            (_topOverscrollExtent + (-notification.overscroll)).clamp(0.0, double.infinity);
+        widget.onVerticalScroll!(-_topOverscrollExtent);
+      }
+    } else if (notification is ScrollEndNotification &&
+        notification.metrics.pixels >= 0 &&
+        _topOverscrollExtent != 0) {
+      _topOverscrollExtent = 0;
+      widget.onVerticalScroll!(notification.metrics.pixels);
+      widget.onVerticalScrollEnd?.call();
+    } else if (notification is ScrollEndNotification) {
+      widget.onVerticalScrollEnd?.call();
+    }
+
+    return false;
+  }
+
+  void _handleVerticalScroll() {
+    widget.onVerticalScroll?.call(_verticalController.offset);
+  }
+
+  Widget _buildSearchBar(BuildContext context, DatabaseController db) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          FilledButton.tonalIcon(
+            onPressed: widget.hasUnsavedChanges && !widget.isSaving
+                ? () => widget.onSaveChanges?.call()
+                : null,
+            icon: widget.isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save, size: 18),
+            label: Text(widget.isSaving ? '保存中' : '保存'),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '搜索 ${db.currentTable}...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: db.searchTerm != null
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          db.setSearch(null);
+                        },
+                      )
+                    : null,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              onChanged: (v) => db.setSearch(v),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

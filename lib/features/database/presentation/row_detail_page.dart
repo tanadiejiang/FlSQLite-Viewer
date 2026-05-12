@@ -196,9 +196,6 @@ class _RowDetailPageState extends State<RowDetailPage> {
   void _save() {
     final values = <String, dynamic>{};
     for (final col in widget.table.columns) {
-      if (col.primaryKey) {
-        continue;
-      }
       if (_nullFlags[col.name] == true) {
         values[col.name] = null;
         continue;

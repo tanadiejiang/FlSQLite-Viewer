@@ -12,65 +12,115 @@ import '../models/database_models.dart';
 import '../state/database_controller.dart';
 import '../state/file_access_controller.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage>
+    with SingleTickerProviderStateMixin {
+  static const double _tableSelectorExpandedHeight = 44;
+  static const double _tableSelectorCollapseRange = 96;
+  static const double _tableSelectorRevealLeadDistance = 192;
+  static const double _tableSelectorRevealDistance = 128;
+  static const double _tableSelectorTopPullRevealDistance = 160;
+  static const double _tableSelectorAutoCollapseThreshold = 0.25;
+  static const double _tableSelectorAutoExpandThreshold = 0.8;
+
+  double _tableSelectorCollapseProgress = 0;
+  double? _lastTableScrollOffset;
+  double _tableSelectorRevealAccumulator = 0;
+  double? _topPullStartProgress;
+  bool _lastScrollWasReveal = false;
+  late final AnimationController _tableSelectorSettleController;
+  Animation<double>? _tableSelectorSettleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _tableSelectorSettleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addListener(() {
+        final animation = _tableSelectorSettleAnimation;
+        if (animation == null || !mounted) {
+          return;
+        }
+        setState(() {
+          _tableSelectorCollapseProgress = animation.value;
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _tableSelectorSettleController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final db = ref.watch(databaseControllerProvider);
     final isAndroid = Platform.isAndroid;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title: const Text('FlSQLite Viewer'),
-        actions: [
-          if (db.isOpen)
+    return PopScope(
+      canPop: !db.isOpen,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || !db.isOpen) {
+          return;
+        }
+        await _handleBackFromDatabase(context, db);
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        appBar: AppBar(
+          leading: db.isOpen
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: '返回',
+                  onPressed: () => _handleBackFromDatabase(context, db),
+                )
+              : null,
+          automaticallyImplyLeading: false,
+          title: db.isOpen ? null : const Text('FlSQLite Viewer'),
+          actions: [
             IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: '关闭数据库',
-              onPressed: () {
-                db.closeDatabase();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('数据库已关闭')),
-                );
-              },
+              icon: const Icon(Icons.folder_open),
+              tooltip: '文件浏览器',
+              onPressed: () => _openFileBrowser(context),
             ),
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: '文件浏览器',
-            onPressed: () => _openFileBrowser(context, ref),
-          ),
-          if (isAndroid)
-            IconButton(
-              icon: const Icon(Icons.shield_outlined),
-              tooltip: '高级访问',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AndroidAccessPage(),
-                  ),
-                );
-              },
-            ),
-          if (db.isOpen)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: '新增行',
-              onPressed: () => _showInsertDialog(context, ref),
-            ),
-        ],
+            if (isAndroid)
+              IconButton(
+                icon: const Icon(Icons.shield_outlined),
+                tooltip: '高级访问',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AndroidAccessPage(),
+                    ),
+                  );
+                },
+              ),
+            if (db.isOpen)
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: '新增行',
+                onPressed: () => _showInsertDialog(context),
+              ),
+          ],
+        ),
+        body: db.isOpen
+            ? _buildDatabaseView(context, db)
+            : _buildWelcomeView(context, isAndroid, db),
       ),
-      body: db.isOpen
-          ? _buildDatabaseView(context, ref, db)
-          : _buildWelcomeView(context, isAndroid, ref, db),
     );
   }
 
   Widget _buildWelcomeView(
     BuildContext context,
     bool isAndroid,
-    WidgetRef ref,
     DatabaseController db,
   ) {
     final theme = Theme.of(context);
@@ -101,7 +151,7 @@ class HomePage extends ConsumerWidget {
               style: FilledButton.styleFrom(
                 minimumSize: const Size(220, 48),
               ),
-              onPressed: () => _openFileBrowser(context, ref),
+              onPressed: () => _openFileBrowser(context),
             ),
             if (isAndroid) ...[
               const SizedBox(height: 12),
@@ -151,7 +201,7 @@ class HomePage extends ConsumerWidget {
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
-                          onTap: () => _openRecentDatabase(context, ref, entry),
+                          onTap: () => _openRecentDatabase(context, entry),
                         ),
                     ],
                   ),
@@ -198,11 +248,7 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildDatabaseView(
-    BuildContext context,
-    WidgetRef ref,
-    DatabaseController db,
-  ) {
+  Widget _buildDatabaseView(BuildContext context, DatabaseController db) {
     final theme = Theme.of(context);
 
     return Column(
@@ -227,55 +273,267 @@ class HomePage extends ConsumerWidget {
             ],
           ),
         ),
-        Container(
+        SizedBox(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final table in db.tableNames)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(table),
-                      selected: db.currentTable == table,
-                      onSelected: (_) => db.selectTable(table),
-                      visualDensity: VisualDensity.compact,
+          height:
+              _tableSelectorExpandedHeight * (1 - _tableSelectorCollapseProgress),
+          child: ClipRect(
+            child: Align(
+              alignment: Alignment.topLeft,
+              heightFactor: 1 - _tableSelectorCollapseProgress,
+              child: Opacity(
+                opacity: 1 - _tableSelectorCollapseProgress,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final table in db.tableNames)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(table),
+                                selected: db.currentTable == table,
+                                onSelected: (_) => db.selectTable(table),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ),
         const Divider(height: 1),
         Expanded(
           child: DataGrid(
+            hasUnsavedChanges: db.hasUnsavedChanges,
+            isSaving: db.isSaving,
+            onSaveChanges: () => _saveChanges(db),
+            onVerticalScroll: _handleTableSelectorScroll,
+            onVerticalScrollEnd: _handleTableSelectorScrollEnd,
             onRefresh: () => db.refreshFromSource(
               ref.read(fileAccessControllerProvider),
             ),
-            onOpenRowDetail: (row) => _openRowDetail(context, ref, row),
-            onEditRow: (row) => _showEditDialog(context, ref, row),
-            onDeleteRow: (row) => _confirmDelete(context, ref, row),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: FilledButton.tonalIcon(
-            icon: const Icon(Icons.save, size: 18),
-            label: const Text('保存更改'),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('更改已自动保存到工作副本')),
-              );
-            },
+            onOpenRowDetail: (row) => _openRowDetail(context, row),
+            onEditRow: (row) => _showEditDialog(context, row),
+            onDeleteRow: (row) => _confirmDelete(context, row),
           ),
         ),
       ],
     );
   }
 
-  void _openFileBrowser(BuildContext context, WidgetRef ref) {
+  void _resetTableSelectorScrollState() {
+    _tableSelectorCollapseProgress = 0;
+    _tableSelectorRevealAccumulator = 0;
+    _lastTableScrollOffset = null;
+    _topPullStartProgress = null;
+    _lastScrollWasReveal = false;
+    _tableSelectorSettleAnimation = null;
+    _tableSelectorSettleController.stop();
+  }
+
+  void _stopTableSelectorSettleAnimation() {
+    if (_tableSelectorSettleController.isAnimating) {
+      _tableSelectorSettleController.stop();
+    }
+    _tableSelectorSettleAnimation = null;
+  }
+
+  void _animateTableSelectorProgressTo(double target) {
+    _stopTableSelectorSettleAnimation();
+    _tableSelectorSettleAnimation = Tween<double>(
+      begin: _tableSelectorCollapseProgress,
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _tableSelectorSettleController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _tableSelectorSettleController
+      ..reset()
+      ..forward();
+  }
+
+  void _handleTableSelectorScrollEnd() {
+    _topPullStartProgress = null;
+    if (_lastScrollWasReveal &&
+        _tableSelectorCollapseProgress > 0 &&
+        _tableSelectorCollapseProgress <= _tableSelectorAutoExpandThreshold) {
+      _animateTableSelectorProgressTo(0);
+    } else if (!_lastScrollWasReveal &&
+        _tableSelectorCollapseProgress >= _tableSelectorAutoCollapseThreshold &&
+        _tableSelectorCollapseProgress < 1) {
+      _animateTableSelectorProgressTo(1);
+    }
+    _lastScrollWasReveal = false;
+  }
+
+  void _handleTableSelectorScroll(double offset) {
+    _stopTableSelectorSettleAnimation();
+    final previousOffset = _lastTableScrollOffset;
+    _lastTableScrollOffset = offset;
+    if (previousOffset == null) {
+      return;
+    }
+
+    if (previousOffset >= 0 && offset < 0) {
+      _topPullStartProgress = _tableSelectorCollapseProgress;
+    }
+
+    if (previousOffset < 0 && offset >= 0) {
+      _lastTableScrollOffset = 0;
+      _topPullStartProgress = null;
+      return;
+    }
+
+    if (offset < 0 || previousOffset < 0) {
+      final topPullDistance = offset < 0 ? -offset : 0.0;
+      final startProgress = _topPullStartProgress ?? _tableSelectorCollapseProgress;
+      final nextProgress =
+          (startProgress - topPullDistance / _tableSelectorTopPullRevealDistance)
+              .clamp(0.0, 1.0);
+      _tableSelectorRevealAccumulator = 0;
+      _lastScrollWasReveal = nextProgress < _tableSelectorCollapseProgress;
+      if ((nextProgress - _tableSelectorCollapseProgress).abs() > 0.001 &&
+          mounted) {
+        setState(() {
+          _tableSelectorCollapseProgress = nextProgress;
+        });
+      }
+      return;
+    }
+
+    final delta = offset - previousOffset;
+    if (delta.abs() < 0.5) {
+      return;
+    }
+
+    var nextProgress = _tableSelectorCollapseProgress;
+    if (delta > 0) {
+      _tableSelectorRevealAccumulator = 0;
+      nextProgress =
+          (nextProgress + delta / _tableSelectorCollapseRange).clamp(0.0, 1.0);
+    } else {
+      final upwardDistance = -delta;
+      if (nextProgress >= 0.999 || _tableSelectorRevealAccumulator > 0) {
+        _tableSelectorRevealAccumulator += upwardDistance;
+        if (_tableSelectorRevealAccumulator <=
+            _tableSelectorRevealLeadDistance) {
+          nextProgress = 1.0;
+        } else {
+          final revealProgress = ((_tableSelectorRevealAccumulator -
+                      _tableSelectorRevealLeadDistance) /
+                  _tableSelectorRevealDistance)
+              .clamp(0.0, 1.0);
+          nextProgress = 1.0 - revealProgress;
+        }
+      } else {
+        nextProgress =
+            (nextProgress - upwardDistance / _tableSelectorRevealDistance)
+                .clamp(0.0, 1.0);
+      }
+    }
+
+    if (nextProgress <= 0.001) {
+      _tableSelectorRevealAccumulator = 0;
+      nextProgress = 0;
+    }
+
+    _lastScrollWasReveal = nextProgress < _tableSelectorCollapseProgress;
+    if ((nextProgress - _tableSelectorCollapseProgress).abs() > 0.001 &&
+        mounted) {
+      setState(() {
+        _tableSelectorCollapseProgress = nextProgress;
+      });
+    }
+  }
+
+  Future<void> _saveChanges(DatabaseController db) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final access = ref.read(fileAccessControllerProvider);
+    await db.saveChanges(access);
+    if (!mounted) return;
+    if (db.errorMessage != null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(db.errorMessage!)),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('更改已保存到源文件')),
+    );
+  }
+
+  Future<void> _handleBackFromDatabase(
+    BuildContext context,
+    DatabaseController db,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!db.hasUnsavedChanges) {
+      db.closeDatabase();
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('数据库已关闭')),
+        );
+      }
+      return;
+    }
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('有未保存修改'),
+        content: const Text('是否先保存当前修改再返回？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('discard'),
+            child: const Text('不保存'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('save'),
+            child: const Text('保存并返回'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (action == 'save') {
+      await _saveChanges(db);
+      if (!mounted) return;
+      if (db.errorMessage != null || db.hasUnsavedChanges) {
+        return;
+      }
+      db.closeDatabase();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('数据库已关闭')),
+      );
+    } else if (action == 'discard') {
+      db.closeDatabase();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('已放弃未保存修改')),
+      );
+    }
+  }
+
+  void _openFileBrowser(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FileBrowserPage(
@@ -289,17 +547,16 @@ class HomePage extends ConsumerWidget {
                 forcedMode: forcedMode,
               );
               await db.openDatabase(session);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('已打开: $path')),
-                );
-              }
+              if (!mounted) return;
+              setState(_resetTableSelectorScrollState);
+              messenger.showSnackBar(
+                SnackBar(content: Text('已打开: $path')),
+              );
             } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(_formatOpenFailureMessage(e))),
-                );
-              }
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(content: Text(_formatOpenFailureMessage(e))),
+              );
             }
           },
         ),
@@ -309,11 +566,11 @@ class HomePage extends ConsumerWidget {
 
   Future<void> _openRecentDatabase(
     BuildContext context,
-    WidgetRef ref,
     DatabaseHistoryEntry entry,
   ) async {
     final access = ref.read(fileAccessControllerProvider);
     final db = ref.read(databaseControllerProvider);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final session = await access.openDatabaseFile(
         entry.sourcePath,
@@ -321,23 +578,21 @@ class HomePage extends ConsumerWidget {
             entry.accessMode == FileAccessMode.normal ? null : entry.accessMode,
       );
       await db.openDatabase(session, preferredTable: entry.lastTable);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已重新打开: ${entry.displayName}')),
-        );
-      }
+      if (!mounted) return;
+      setState(_resetTableSelectorScrollState);
+      messenger.showSnackBar(
+        SnackBar(content: Text('已重新打开: ${entry.displayName}')),
+      );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_formatOpenFailureMessage(e))),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(_formatOpenFailureMessage(e))),
+      );
     }
   }
 
   void _openRowDetail(
     BuildContext context,
-    WidgetRef ref,
     Map<String, dynamic> row,
   ) {
     final db = ref.read(databaseControllerProvider);
@@ -356,7 +611,7 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  void _showInsertDialog(BuildContext context, WidgetRef ref) {
+  void _showInsertDialog(BuildContext context) {
     final db = ref.read(databaseControllerProvider);
     if (db.currentTable == null || db.tableSchema == null) return;
 
@@ -367,14 +622,13 @@ class HomePage extends ConsumerWidget {
       if (values is Map<String, dynamic> && context.mounted) {
         db.insertRow(values);
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已新增行')));
+            .showSnackBar(const SnackBar(content: Text('已新增行，待保存到源文件')));
       }
     });
   }
 
   void _showEditDialog(
     BuildContext context,
-    WidgetRef ref,
     Map<String, dynamic> row,
   ) {
     final db = ref.read(databaseControllerProvider);
@@ -391,14 +645,13 @@ class HomePage extends ConsumerWidget {
       if (values is Map<String, dynamic> && context.mounted) {
         db.updateRow(row, values);
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已更新行')));
+            .showSnackBar(const SnackBar(content: Text('已更新行，待保存到源文件')));
       }
     });
   }
 
   void _confirmDelete(
     BuildContext context,
-    WidgetRef ref,
     Map<String, dynamic> row,
   ) {
     showDialog(
@@ -419,8 +672,9 @@ class HomePage extends ConsumerWidget {
               Navigator.of(ctx).pop();
               final db = ref.read(databaseControllerProvider);
               db.deleteRow(row);
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('已删除行')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已删除行，待保存到源文件')),
+              );
             },
             child: const Text('删除'),
           ),
