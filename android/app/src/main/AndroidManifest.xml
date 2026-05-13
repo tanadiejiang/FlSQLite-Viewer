@@ -6,7 +6,8 @@
     <application
         android:label="FlSQLite Viewer"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_sql"
+        android:roundIcon="@mipmap/ic_launcher_sql_round"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
