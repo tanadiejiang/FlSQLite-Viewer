@@ -40,6 +40,8 @@ class FileBrowserController extends ChangeNotifier {
       entries.where((e) => e.isDirectory).toList();
   List<DirectoryEntry> get files =>
       entries.where((e) => !e.isDirectory).toList();
+  int get directoryCount => directories.length;
+  int get fileCount => files.length;
 
   String _filter = '';
   String get filter => _filter;

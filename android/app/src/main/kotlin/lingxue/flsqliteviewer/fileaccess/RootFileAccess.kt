@@ -66,17 +66,17 @@ object RootFileAccess {
         Runtime.getRuntime().exec(arrayOf("su", "-c", command))
 
     fun listDirectoryEntries(executor: ExecutorService, path: String): List<Map<String, String>> =
-        fileListAdapter(executor, path) { command -> rootProcess(command) }
+        fileListAdapter(executor, path, ::rootCandidatePaths) { command -> rootProcess(command) }
 
     fun readFile(executor: ExecutorService, path: String): ByteArray =
-        fileReadAdapter(executor, path) { command -> rootProcess(command) }
+        fileReadAdapter(executor, path, ::rootCandidatePaths) { command -> rootProcess(command) }
 
     fun writeFile(executor: ExecutorService, path: String, bytes: ByteArray) {
-        fileWriteAdapter(executor, path, bytes) { command -> rootProcess(command) }
+        fileWriteAdapter(executor, path, bytes, ::rootCandidatePaths) { command -> rootProcess(command) }
     }
 
     fun exists(executor: ExecutorService, path: String): Boolean =
-        fileExistsAdapter(executor, path) { command -> rootProcess(command) }
+        fileExistsAdapter(executor, path, ::rootCandidatePaths) { command -> rootProcess(command) }
 
     internal fun executeTextProcess(
         executor: ExecutorService,
@@ -230,6 +230,27 @@ object RootFileAccess {
         return candidates
     }
 
+    internal fun rootCandidatePaths(path: String): LinkedHashSet<String> {
+        val normalized = path.trim().ifEmpty { "/" }
+        val candidates = linkedSetOf<String>()
+        realSharedStoragePath(normalized)?.let { candidates.add(it) }
+        candidates.addAll(candidatePaths(normalized))
+        return candidates
+    }
+
+    internal fun realSharedStoragePath(path: String): String? {
+        val normalized = path.trim().ifEmpty { "/" }
+        return when {
+            normalized == "/storage/emulated/0" -> "/data/media/0"
+            normalized.startsWith("/storage/emulated/0/") ->
+                normalized.replaceFirst("/storage/emulated/0/", "/data/media/0/")
+            normalized == "/sdcard" -> "/data/media/0"
+            normalized.startsWith("/sdcard/") ->
+                normalized.replaceFirst("/sdcard/", "/data/media/0/")
+            else -> null
+        }
+    }
+
     internal fun parentPath(path: String): String {
         val normalized = path.trim().replace('\\', '/')
         val idx = normalized.lastIndexOf('/')
@@ -305,9 +326,10 @@ object RootFileAccess {
     internal fun fileListAdapter(
         executor: ExecutorService,
         path: String,
+        candidatePathProvider: (String) -> LinkedHashSet<String> = ::candidatePaths,
         startProcess: (String) -> Process,
     ): List<Map<String, String>> {
-        val candidates = candidatePaths(path).toList()
+        val candidates = candidatePathProvider(path).toList()
         val errors = mutableListOf<String>()
         for (candidate in candidates) {
             val result = try {
@@ -362,9 +384,10 @@ object RootFileAccess {
     internal fun fileReadAdapter(
         executor: ExecutorService,
         path: String,
+        candidatePathProvider: (String) -> LinkedHashSet<String> = ::candidatePaths,
         startProcess: (String) -> Process,
     ): ByteArray {
-        val candidates = candidatePaths(path).toList()
+        val candidates = candidatePathProvider(path).toList()
         val errors = mutableListOf<String>()
         for (candidate in candidates) {
             val command =
@@ -394,9 +417,10 @@ object RootFileAccess {
     internal fun fileExistsAdapter(
         executor: ExecutorService,
         path: String,
+        candidatePathProvider: (String) -> LinkedHashSet<String> = ::candidatePaths,
         startProcess: (String) -> Process,
     ): Boolean {
-        for (candidate in candidatePaths(path)) {
+        for (candidate in candidatePathProvider(path)) {
             val result = try {
                 executeTextProcess(
                     executor,
@@ -416,9 +440,10 @@ object RootFileAccess {
         executor: ExecutorService,
         path: String,
         bytes: ByteArray,
+        candidatePathProvider: (String) -> LinkedHashSet<String> = ::candidatePaths,
         startProcess: (String) -> Process,
     ) {
-        val candidates = candidatePaths(path).toList()
+        val candidates = candidatePathProvider(path).toList()
         val errors = mutableListOf<String>()
         for (candidate in candidates) {
             val targetParent = parentPath(candidate)

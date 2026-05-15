@@ -41,6 +41,62 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
     super.dispose();
   }
 
+  String _normalizePath(String path) {
+    var normalized = path.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty) {
+      return '/';
+    }
+    if (!normalized.startsWith('/')) {
+      normalized = '/$normalized';
+    }
+    while (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+
+  bool _isShizukuAndroidDataRoot(FileBrowserController browser) {
+    if (browser.lastForcedMode != FileAccessMode.shizuku) {
+      return false;
+    }
+    final normalized = _normalizePath(browser.currentPath);
+    return normalized == '/storage/emulated/0/Android/data' ||
+        normalized == '/sdcard/Android/data';
+  }
+
+  Widget _buildShizukuFuseLimitHint(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Shizuku 模式下 Android/data 受 FUSE 限制，可能少 1-2 项；完整结果需要 Root',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final browser = ref.watch(fileBrowserControllerProvider);
@@ -54,6 +110,11 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
     }
     final theme = Theme.of(context);
     final isWide = MediaQuery.of(context).size.width > 600;
+    final countsText = !browser.isLoading && browser.errorMessage == null
+        ? '${browser.directoryCount} 个文件夹 · ${browser.fileCount} 个文件'
+        : null;
+    final showShizukuFuseHint =
+        !_isShizukuAndroidDataRoot(browser) ? false : !browser.isDesktop;
 
     return Scaffold(
       appBar: AppBar(
@@ -101,6 +162,7 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
               compact: !isWide,
             ),
           ),
+          if (showShizukuFuseHint) _buildShizukuFuseLimitHint(context),
           if (browser.isDesktop)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -175,15 +237,35 @@ class _FileBrowserPageState extends ConsumerState<FileBrowserPage> {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FilterChip(
-                selected: browser.showDatabasesOnly,
-                onSelected: browser.setShowDatabasesOnly,
-                label: Text(s.showDatabasesOnly),
-                avatar: const Icon(Icons.storage, size: 16),
-                visualDensity: VisualDensity.compact,
-              ),
+            child: Row(
+              children: [
+                FilterChip(
+                  selected: browser.showDatabasesOnly,
+                  onSelected: browser.setShowDatabasesOnly,
+                  label: Text(s.showDatabasesOnly),
+                  avatar: const Icon(Icons.storage, size: 16),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (countsText != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          countsText,
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 4),
